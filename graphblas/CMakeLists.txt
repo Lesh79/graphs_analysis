@@ -4,8 +4,17 @@ project(GraphBlasAlgorithms)
 find_package(GraphBLAS REQUIRED)
 find_package(LAGraph REQUIRED)
 
-add_executable(prim-mst prim/main.cpp)
-target_link_libraries(prim-mst PRIVATE GraphBLAS::GraphBLAS SuiteSparse::LAGraph)
+set(SRC_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parser.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/algos/boruvka.cpp
+    )
 
-add_executable(boruvka-mst boruvka/main.cpp)
-target_link_libraries(boruvka-mst PRIVATE GraphBLAS::GraphBLAS SuiteSparse::LAGraph)
+add_executable(mst ${SRC_FILES})
+target_include_directories(
+        mst 
+        SYSTEM
+        PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+target_link_libraries(mst PRIVATE GraphBLAS::GraphBLAS SuiteSparse::LAGraphX)
