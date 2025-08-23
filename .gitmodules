@@ -1,0 +1,3 @@
+[submodule "graphblas/external/LAGraph"]
+	path = graphblas/external/LAGraph
+	url = https://github.com/GraphBLAS/LAGraph.git

@@ -1,8 +1,8 @@
-cmake_minimum_required(VERSION 3.10)
-project(GraphBlasAlgorithms)
+cmake_minimum_required(VERSION 3.17)
+project(GraphBlasMST)
 
 find_package(GraphBLAS REQUIRED)
-find_package(LAGraph REQUIRED)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external/LAGraph)
 
 set(SRC_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp
@@ -17,4 +17,4 @@ target_include_directories(
         PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
-target_link_libraries(mst PRIVATE GraphBLAS::GraphBLAS SuiteSparse::LAGraphX)
+target_link_libraries(mst PRIVATE SuiteSparse::GraphBLAS LAGraphX)
