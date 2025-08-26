@@ -6,17 +6,14 @@
 #include "parser/parser.h"
 
 int main(int argc, char** argv) {
-    // Graph graph = GraphParser::ParseDIMACS("data/USA-road-d.NY.gr");
-    // std::cout << "Graph: " << graph.n_nodes << ' ' << graph.n_arcs <<
-    // std::endl;
+    GrB_init(GrB_NONBLOCKING);
 
-    GrB_Matrix A;
-    int num_nodes = 10;
-    GrB_Info status = GrB_Matrix_new(&A, GrB_UINT64, num_nodes, num_nodes);
-    std::cout << status << std::endl;
+    Graph graph = GraphParser::ParseDIMACS("../data/USA-road-d.NY.gr");
+    std::cout << "Graph: " << graph.n_nodes << ' ' << graph.n_arcs << std::endl;
 
-    // BoruvkaRunner runner;
-    // runner.RunAlgo(graph);
+    BoruvkaRunner runner;
+    int status = runner.RunAlgo(graph);
+    std::cout << "Status: " << status << std::endl;
 
     return 0;
 }

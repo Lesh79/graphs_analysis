@@ -1,7 +1,6 @@
 #include "parser/parser.h"
 
 #include <fstream>
-#include <iostream>
 #include <sstream>
 
 Graph GraphParser::ParseDIMACS(std::string const& filepath) {
@@ -30,7 +29,6 @@ Graph GraphParser::ParseDIMACS(std::string const& filepath) {
 
             int status = GrB_Matrix_new(&graph.matrix, GrB_UINT64,
                                         graph.n_nodes, graph.n_nodes);
-            std::cout << status;
             graph.is_inited = true;
         }
 

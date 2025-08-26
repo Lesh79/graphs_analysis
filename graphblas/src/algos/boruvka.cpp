@@ -9,6 +9,8 @@ int BoruvkaRunner::RunAlgo(Graph const& graph) {
     GrB_Vector components;
     char msg[LAGRAPH_MSG_LEN];
     int status = LAGraph_msf(&msf, &components, graph.matrix, false, msg);
-    std::cout << msg << std::endl;
+    if (status != 0) {
+        std::cout << msg << std::endl;
+    }
     return status;
 }
