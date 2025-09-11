@@ -47,3 +47,20 @@ def test_graph_2(spark):
     mst_edges, total_weight = boruvka_mst(spark, edges_df, num_vertices)
 
     assert total_weight == 27
+
+def test_graph_3(spark):
+    edges = [
+        (0, 1, 1.0),
+        (0, 2, 2.0),
+        (1, 2, 2.0),
+        (2, 3, 2.0),
+        (2, 4, 2.0),
+        (3, 4, 1.0),
+    ]
+    
+    edges_df = spark.createDataFrame(edges, ["u", "v", "weight"])
+    num_vertices = 5
+        
+    mst_edges, total_weight = boruvka_mst(spark, edges_df, num_vertices)
+
+    assert total_weight == 6

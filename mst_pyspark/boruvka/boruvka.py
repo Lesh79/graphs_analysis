@@ -1,3 +1,5 @@
+import time
+
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, row_number
 from pyspark.sql.window import Window
@@ -136,20 +138,23 @@ if __name__ == "__main__":
     spark = SparkSession.builder.appName("BoruvkaMST").getOrCreate()
 
     edges = [
-        (0, 1, 4.0),
-        (0, 2, 2.0),
-        (1, 2, 1.0),
-        (1, 3, 5.0),
-        (2, 3, 8.0),
-        (2, 4, 10.0),
-        (3, 4, 2.0),
-        (3, 5, 6.0),
-        (4, 5, 3.0),
+        (0, 1, 1),
+        (0, 2, 2),
+        (1, 2, 2),
+        (2, 3, 2),
+        (2, 4, 2),
+        (3, 4, 1),
     ]
     edges_df = spark.createDataFrame(edges, ["u", "v", "weight"])
     num_vertices = 6
 
+    start_time = time.time()
     mst_edges, total_weight = boruvka_mst(spark, edges_df, num_vertices)
+    end_time = time.time()
+    t = end_time - start_time
+
+    print(f"{t:.4f} sec")
+
     print("MST edges:", mst_edges)
     print("Total MST weight:", total_weight)
     
