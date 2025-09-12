@@ -1,21 +1,26 @@
 import time
-
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, row_number
-from pyspark.sql.window import Window
 from typing import List, Tuple
+from pyspark.sql import SparkSession
+from pyspark.sql import Window
+from pyspark.sql.functions import col, row_number
+
+from utils import load_dimacs_graph_with_metadata
+
+
+def create_components_df(spark: SparkSession, num_vertices: int, offset: int = 0):
+    # each v is a comp
+    vertices = [(i, i) for i in range(offset, offset + num_vertices)]
+    return spark.createDataFrame(vertices, ["vertex", "comp"])
 
 
 def boruvka_mst(
     spark: SparkSession, edges_df, num_vertices: int
 ) -> Tuple[List[Tuple[int, int, float]], float]:
-
-    vertices = [(i, i) for i in range(num_vertices)]
-    components_df = spark.createDataFrame(vertices, ["vertex", "comp"])
+    components_df = create_components_df(spark, num_vertices)
 
     tree_count = num_vertices
     total_weight = 0.0
-    mst_edges = []  # (u, v, weight) tuples
+    mst_edges: List[Tuple[int, int, float]] = []  # (u, v, weight) tuples
 
     while tree_count > 1:
         c1 = components_df.alias("c1")
@@ -35,7 +40,9 @@ def boruvka_mst(
         )
 
         cross_comp_edges = edges_with_comps.filter(col("comp_u") != col("comp_v"))
-        if cross_comp_edges.rdd.isEmpty():
+
+        # pick one row (if df is empty then output is []).
+        if not cross_comp_edges.rdd.take(1):
             break
 
         candidates_u = cross_comp_edges.select(
@@ -55,6 +62,7 @@ def boruvka_mst(
         candidates = candidates_u.union(candidates_v)
 
         win = Window.partitionBy("comp").orderBy("weight")
+
         cheapest_per_comp = (
             candidates.withColumn("rn", row_number().over(win))
             .filter(col("rn") == 1)
@@ -137,25 +145,17 @@ def boruvka_mst(
 if __name__ == "__main__":
     spark = SparkSession.builder.appName("BoruvkaMST").getOrCreate()
 
-    edges = [
-        (0, 1, 1),
-        (0, 2, 2),
-        (1, 2, 2),
-        (2, 3, 2),
-        (2, 4, 2),
-        (3, 4, 1),
-    ]
-    edges_df = spark.createDataFrame(edges, ["u", "v", "weight"])
-    num_vertices = 6
+    edges_df, num_vertices = load_dimacs_graph_with_metadata(
+        spark, "data/USA-road-d.NY.gr"
+    )
 
     start_time = time.time()
     mst_edges, total_weight = boruvka_mst(spark, edges_df, num_vertices)
     end_time = time.time()
     t = end_time - start_time
 
+    # print("MST edges:", mst_edges)
+    print("Total MST weight:", total_weight)
     print(f"{t:.4f} sec")
 
-    print("MST edges:", mst_edges)
-    print("Total MST weight:", total_weight)
-    
     spark.stop()
