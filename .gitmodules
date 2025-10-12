@@ -1,0 +1,3 @@
+[submodule "triangles/spla_tc/spla"]
+	path = triangles/spla_tc/spla
+	url = https://github.com/SparseLinearAlgebra/spla
