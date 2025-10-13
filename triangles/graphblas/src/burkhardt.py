@@ -1,11 +1,11 @@
-from pygraphblas import *
-from pygraphblas.gviz import *
+import graphblas as gb
+gb.init("suitesparse", blocking=True)
 
-def burkhardt(matrix):
-    A = matrix
+from graphblas import binary
+
+def burkhardt(A):
+    squared = A.mxm(A)
+    res = squared.ewise_mult(A, op=binary.gt)
+    triangle_count = res // 6
     
-    A_squared = A.mxm(A)
-    triangles_matrix = A_squared * A
-    triangle_count = triangles_matrix.nvals // 6
-    
-    return triangle_count, triangles_matrix
+    return triangle_count
