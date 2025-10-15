@@ -12,8 +12,6 @@ def download():
         'com-youtube.ungraph.txt': 'https://snap.stanford.edu/data/bigdata/communities/com-youtube.ungraph.txt.gz',
         'com-orkut.ungraph.txt': 'https://snap.stanford.edu/data/bigdata/communities/com-orkut.ungraph.txt.gz',
         'com-lj.ungraph.txt': 'https://snap.stanford.edu/data/bigdata/communities/com-lj.ungraph.txt.gz',
-
-
     }
 
     os.makedirs(FOLDER_NAME, exist_ok=True)
