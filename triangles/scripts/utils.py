@@ -2,10 +2,8 @@ import graphblas as gb
 gb.init("suitesparse", blocking=True)
 
 def file_to_adj_matrix(filename,
-                       n_rows, 
-                       n_cols, 
-                       index_from_zero: bool, 
-                       bidirectional: bool):
+                       index_from_zero: bool
+                       ):
     rows = []
     cols = []
     
@@ -24,11 +22,11 @@ def file_to_adj_matrix(filename,
                 rows.append(from_node)
                 cols.append(to_node)
 
-    if bidirectional:
-        M = gb.Matrix.from_coo(rows, cols, nrows=n_rows, ncols=n_cols)
-    else: 
-        all_rows = rows + cols
-        all_cols = cols + rows
-        M = gb.Matrix.from_coo(all_rows, all_cols, nrows=n_rows, ncols=n_cols)
+    n = max(max(rows), max(cols)) + 1
+
+    all_rows = rows + cols
+    all_cols = cols + rows
+    
+    M = gb.Matrix.from_coo(all_rows, all_cols, nrows=n, ncols=n)
 
     return M
