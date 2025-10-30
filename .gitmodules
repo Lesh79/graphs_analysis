@@ -1,0 +1,6 @@
+[submodule "external/LAGraph"]
+	path = external/LAGraph
+	url = https://github.com/GraphBLAS/LAGraph
+[submodule "external/spla"]
+	path = external/spla
+	url = https://github.com/SparseLinearAlgebra/spla
