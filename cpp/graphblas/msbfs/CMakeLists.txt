@@ -1,4 +1,4 @@
-set(MSBFS_TARGET_NAME msbfs-pagerank)
+set(MSBFS_TARGET_NAME gb-msbfs)
 
 set(MSBFS_SRC_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
