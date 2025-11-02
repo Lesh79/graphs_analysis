@@ -1,0 +1,10 @@
+#pragma once
+
+#include <fstream>
+
+#include "graph.h"
+
+class Parser {
+   public:
+    GBGraph ParseDIMACS(std::string const& filepath);
+};
