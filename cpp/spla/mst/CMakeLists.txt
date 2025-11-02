@@ -1,4 +1,4 @@
-set(MST_TARGET_NAME mst)
+set(MST_TARGET_NAME spla-mst)
 
 set(MST_SRC_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp

@@ -1,4 +1,4 @@
-set(MSBFS_TARGET_NAME msbfs)
+set(MSBFS_TARGET_NAME spla-msbfs)
 
 set(MSBFS_SRC_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp

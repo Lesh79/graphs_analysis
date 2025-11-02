@@ -1,4 +1,4 @@
-set(PR_TARGET_NAME pagerank)
+set(PR_TARGET_NAME spla-pagerank)
 
 set(PR_SRC_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
