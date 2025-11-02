@@ -1,3 +1,5 @@
+#include <sstream>
+
 #include "parser.h"
 
 #define SPLA_OK(call)                                         \
