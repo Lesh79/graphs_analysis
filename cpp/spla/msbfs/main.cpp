@@ -1,13 +1,12 @@
 #include <iostream>
 #include <spla.hpp>
 
-#include "graph.h"
+#include "parser.h"
 
 int main() {
-    std::cout << "Hello world" << std::endl;
-    spla::Library* library = spla::Library::get();
-    std::string acc_info;
-    library->get_accelerator_info(acc_info);
-    std::cout << "env: " << acc_info << std::endl;
+    Parser parser;
+    SPLAGraph graph = parser.ParseDIMACS(
+        "/home/maybenotilya/proj/graphs_analysis/data/NY.gr");
+    std::cout << graph.n_edges << ' ' << graph.n_vertices << std::endl;
     return 0;
 }

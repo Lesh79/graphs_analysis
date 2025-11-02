@@ -2,6 +2,8 @@ set(MSBFS_TARGET_NAME msbfs)
 
 set(MSBFS_SRC_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common/parser.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common/algorunner.cpp
 )
 
 add_executable(${MSBFS_TARGET_NAME} ${MSBFS_SRC_FILES})
