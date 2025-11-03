@@ -1,16 +1,14 @@
 #include "algo.h"
-
 #include <stdexcept>
 #include <vector>
-#include <limits>
 #include <chrono>
-#include <cmath>
+#include <iostream>
+#include <LAGraph.h>
 
 using clocks = std::chrono::steady_clock;
 
 GBPageRank::GBPageRank(double alpha, double eps, int max_iter)
     : alpha_(alpha), eps_(eps), max_iter_(max_iter) {}
-
 
 void GBPageRank::RunAlgo(const GBGraph& graph) {
     if (!graph.is_inited || graph.matrix == nullptr) {
@@ -27,21 +25,73 @@ void GBPageRank::RunAlgo(const GBGraph& graph) {
     auto start = clocks::now();
     rank_ = ComputePageRankCore(graph, alpha_, eps_, max_iter_);
     auto end = clocks::now();
-
     exec_time_ = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     parsed_ = false;
 }
 
 GrB_Vector GBPageRank::ComputePageRankCore(const GBGraph& graph, double alpha, double eps, int max_iter) {
+    GrB_Vector rank;
+    GrB_Vector_new(&rank, GrB_FP64, graph.n_nodes);
+
+    GrB_Matrix matrix = graph.matrix;
+
+    LAGraph_Graph G;
+    int status = LAGraph_New(&G, &matrix, LAGraph_ADJACENCY_DIRECTED, msg_);
+    if (status != GrB_SUCCESS) {
+        std::cout << "Failed to create LAGraph_Graph: " << msg_ << std::endl;
+        throw std::runtime_error(std::string("LAGraph_New failed: ") + msg_);
+    }
+
+    status = LAGraph_Cached_AT(G, msg_);
+    if (status != GrB_SUCCESS) {
+        LAGraph_Delete(&G, msg_);
+        std::cout << "Failed to cache LAGraph_AT: " << msg_ << std::endl;
+        throw std::runtime_error(std::string("LAGraph_Cached_AT failed: ") + msg_);
+    }
+
+    status = LAGraph_Cached_OutDegree(G, msg_);
+    if (status != GrB_SUCCESS) {
+        LAGraph_Delete(&G, msg_);
+        std::cout << "Failed to cache LAGraph_OutDegree: " << msg_ << std::endl;
+        throw std::runtime_error(std::string("LAGraph_Cached_OutDegree failed: ") + msg_);
+    }
+
+    int niters = 0;
+    status = LAGr_PageRank(&rank, &niters, G, alpha, eps, max_iter, msg_);
+    if (status != GrB_SUCCESS) {
+        LAGraph_Delete(&G, msg_);
+        std::cout << "Failed to compute PageRank: " << msg_ << std::endl;
+        throw std::runtime_error(std::string("LAGr_PageRank failed: ") + msg_);
+    }
+
+    LAGraph_Delete(&G, msg_);
+    return rank;
 }
 
 void GBPageRank::ParseResult() {
+    parsed_ = true;
+    result_.clear();
+
+    if (rank_ == nullptr)
+        return;
+
+    GrB_Index n;
+    GrB_Vector_size(&n, rank_);
+    result_.resize(n);
+
+    std::vector<GrB_Index> indices(n);
+    std::vector<double> values(n);
+    GrB_Index nvals = n;
+    GrB_Vector_extractTuples_FP64(indices.data(), values.data(), &nvals, rank_);
+
+    for (GrB_Index i = 0; i < nvals; i++) {
+        result_[indices[i]] = values[i];
+    }
 }
 
 const std::vector<double>& GBPageRank::GetResult() const {
-    if (!parsed_ && rank_ != nullptr) {
+    if (!parsed_ && rank_ != nullptr)
         const_cast<GBPageRank*>(this)->ParseResult();
-    }
     return result_;
 }
 
