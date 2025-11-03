@@ -89,8 +89,8 @@ double MSBFSRunner::RunAlgo(SPLAGraph const& graph) {
 
     int i = 0;
     for (auto s : ss_) {
-        prev_fronts->set_int(i, s - 1, s);
-        parents_->set_int(i, s - 1, s);
+        prev_fronts->set_int(i, s, s + 1);
+        parents_->set_int(i, s, s + 1);
         ++i;
     }
 
