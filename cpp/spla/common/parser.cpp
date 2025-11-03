@@ -1,17 +1,8 @@
-#include <sstream>
-
 #include "parser.h"
 
-#define SPLA_OK(call)                                         \
-    do {                                                      \
-        auto status = (call);                                 \
-        if (status != spla::Status::Ok) {                     \
-            throw std::runtime_error("Exited with status " +  \
-                                     std::to_string(status)); \
-        }                                                     \
-    } while (0)
+#include <sstream>
 
-SPLAGraph Parser::ParseDIMACS(std::string const& filepath) {
+SPLAGraph Parser::ParseDIMACS(std::string const& filepath, bool weights) {
     SPLAGraph graph;
     std::ifstream f(filepath);
     if (!f.is_open()) {
@@ -33,8 +24,7 @@ SPLAGraph Parser::ParseDIMACS(std::string const& filepath) {
         if (type == 'p') {
             std::string op;
             iss >> op >> graph.n_vertices >> graph.n_edges;
-            graph.matrix = spla::Matrix::make(graph.n_vertices,
-                                              graph.n_vertices, spla::INT);
+            graph.matrix = spla::Matrix::make(graph.n_vertices, graph.n_vertices, spla::INT);
             graph.matrix->set_fill_value(spla::Scalar::make_int(0));
         }
 
@@ -42,6 +32,10 @@ SPLAGraph Parser::ParseDIMACS(std::string const& filepath) {
             int src, dest;
             int weight;
             iss >> src >> dest >> weight;
+
+            if (!weights) {
+                weight = 1;
+            }
 
             graph.matrix->set_int(src - 1, dest - 1, weight);
             graph.matrix->set_int(dest - 1, src - 1, weight);

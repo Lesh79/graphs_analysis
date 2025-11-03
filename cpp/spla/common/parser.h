@@ -6,6 +6,6 @@
 #include "graph.h"
 
 class Parser {
-   public:
-    SPLAGraph ParseDIMACS(std::string const& filepath);
+public:
+    SPLAGraph ParseDIMACS(std::string const& filepath, bool weights = true);
 };
