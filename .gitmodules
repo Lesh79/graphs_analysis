@@ -3,4 +3,4 @@
 	url = https://github.com/GraphBLAS/LAGraph
 [submodule "external/spla"]
 	path = external/spla
-	url = https://github.com/SparseLinearAlgebra/spla
+	url = https://github.com/Parzival-05/spla
