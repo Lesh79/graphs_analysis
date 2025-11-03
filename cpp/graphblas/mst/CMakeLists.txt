@@ -1,5 +1,7 @@
 set(MST_TARGET_NAME gb-mst)
 
+find_package(GraphBLAS REQUIRED)
+
 set(MST_SRC_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../common/parser.cpp
@@ -18,4 +20,4 @@ target_include_directories(
         "/opt/homebrew/Cellar/suite-sparse/7.11.0/include/suitesparse"
 )
 
-target_link_libraries(${PR_TARGET_NAME} PRIVATE SuiteSparse::GraphBLAS LAGraphX)
+target_link_libraries(${MST_TARGET_NAME} PRIVATE SuiteSparse::GraphBLAS LAGraphX)
