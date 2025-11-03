@@ -4,6 +4,7 @@
 #include "graph.h"
 
 #include <GraphBLAS.h>
+#include <LAGraph.h>
 #include <vector>
 #include <chrono>
 
@@ -18,15 +19,16 @@ public:
     std::chrono::milliseconds GetExecTime() const;
 
 private:
-    static GrB_Vector ComputePageRankCore(const GBGraph& graph, double alpha, double eps, int max_iter);
+    GrB_Vector ComputePageRankCore(const GBGraph& graph, double alpha, double eps, int max_iter);
     void ParseResult();
 
     double alpha_;
     double eps_;
     int max_iter_;
 
-    mutable GrB_Vector rank_{nullptr};
-    mutable std::vector<double> result_;
-    std::chrono::milliseconds exec_time_{0};
-    mutable bool parsed_{false};
+    char msg_[LAGRAPH_MSG_LEN];
+    GrB_Vector rank_ = nullptr;
+    std::vector<double> result_;
+    std::chrono::milliseconds exec_time_;
+    bool parsed_ = false;
 };
