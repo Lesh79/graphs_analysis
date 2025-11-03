@@ -27,9 +27,9 @@ private:
     void ParseResult();
 
     char msg_[LAGRAPH_MSG_LEN];
-    mutable GrB_Matrix mst_matrix_{nullptr};
-    mutable GrB_Vector component_vec_{nullptr};
-    mutable GBTree result_;
-    std::chrono::milliseconds exec_time_{0};
-    mutable bool parsed_{false};
+    GrB_Matrix mst_matrix_ = nullptr;
+    GrB_Vector component_vec_ = nullptr;
+    GBTree result_;
+    std::chrono::milliseconds exec_time_;
+    bool parsed_ = false;
 };
