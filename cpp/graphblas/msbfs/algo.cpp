@@ -1,16 +1,15 @@
 #include "algo.h"
 
-#include <stdexcept>
-#include <limits>
 #include <chrono>
+#include <limits>
+#include <stdexcept>
 #include <vector>
 
 using clocks = std::chrono::steady_clock;
 
-GBMSBFS::GBMSBFS(const std::vector<GrB_Index>& sources)
-    : sources_(sources) {}
+GBMSBFS::GBMSBFS(std::vector<int> const& sources) : sources_(sources) {}
 
-void GBMSBFS::RunAlgo(const GBGraph& graph) {
+void GBMSBFS::RunAlgo(GBGraph const& graph) {
     if (!graph.is_inited || graph.matrix == nullptr) {
         throw std::runtime_error("Graph not initialized");
     }
@@ -30,7 +29,7 @@ void GBMSBFS::RunAlgo(const GBGraph& graph) {
     parsed_ = false;
 }
 
-GrB_Matrix GBMSBFS::ComputeMSBFScore(const GBGraph& graph, const std::vector<GrB_Index>& sources) {
+GrB_Matrix GBMSBFS::ComputeMSBFScore(GBGraph const& graph, std::vector<int> const& sources) {
     GrB_Index nrows;
     GrB_Matrix_nrows(&nrows, graph.matrix);
     GrB_Index nsources = sources.size();
@@ -48,22 +47,20 @@ GrB_Matrix GBMSBFS::ComputeMSBFScore(const GBGraph& graph, const std::vector<GrB
     }
 
     while (true) {
-        GrB_mxm(next_parents, GrB_NULL, GrB_NULL,
-                GxB_ANY_SECONDI_INT64, front, graph.matrix, GrB_NULL);
+        GrB_mxm(next_parents, GrB_NULL, GrB_NULL, GxB_ANY_SECONDI_INT64, front, graph.matrix,
+                GrB_NULL);
 
         GrB_Matrix not_visited;
         GrB_Matrix_new(&not_visited, GrB_BOOL, nsources, nrows);
-        GrB_Matrix_assign_BOOL(not_visited, GrB_NULL, GrB_NULL, true,
-                               GrB_ALL, nsources, GrB_ALL, nrows, GrB_NULL);
-        GrB_Matrix_assign_BOOL(not_visited, visited, GrB_NULL, false,
-                               GrB_ALL, nsources, GrB_ALL, nrows, GrB_DESC_S);
+        GrB_Matrix_assign_BOOL(not_visited, GrB_NULL, GrB_NULL, true, GrB_ALL, nsources, GrB_ALL,
+                               nrows, GrB_NULL);
+        GrB_Matrix_assign_BOOL(not_visited, visited, GrB_NULL, false, GrB_ALL, nsources, GrB_ALL,
+                               nrows, GrB_DESC_S);
 
         GrB_Matrix next_filtered;
         GrB_Matrix_new(&next_filtered, GrB_INT64, nsources, nrows);
-        GrB_Matrix_eWiseMult_BinaryOp(
-            next_filtered, not_visited, GrB_NULL, GrB_SECOND_INT64,
-            next_parents, next_parents, GrB_NULL
-        );
+        GrB_Matrix_eWiseMult_BinaryOp(next_filtered, not_visited, GrB_NULL, GrB_SECOND_INT64,
+                                      next_parents, next_parents, GrB_NULL);
 
         GrB_Index nvals;
         GrB_Matrix_nvals(&nvals, next_filtered);
@@ -73,18 +70,16 @@ GrB_Matrix GBMSBFS::ComputeMSBFScore(const GBGraph& graph, const std::vector<GrB
             break;
         }
 
-        GrB_Matrix_assign(parent, next_filtered, GrB_NULL, next_filtered,
-                          GrB_ALL, nsources, GrB_ALL, nrows, GrB_DESC_S);
+        GrB_Matrix_assign(parent, next_filtered, GrB_NULL, next_filtered, GrB_ALL, nsources,
+                          GrB_ALL, nrows, GrB_DESC_S);
 
         GrB_Matrix_free(&front);
         GrB_Matrix_new(&front, GrB_BOOL, nsources, nrows);
-        GrB_Matrix_assign_BOOL(front, next_filtered, GrB_NULL, true,
-                               GrB_ALL, nsources, GrB_ALL, nrows, GrB_DESC_S);
+        GrB_Matrix_assign_BOOL(front, next_filtered, GrB_NULL, true, GrB_ALL, nsources, GrB_ALL,
+                               nrows, GrB_DESC_S);
 
-        GrB_Matrix_eWiseAdd_BinaryOp(
-            visited, GrB_NULL, GrB_NULL, GrB_LOR,
-            visited, front, GrB_NULL
-        );
+        GrB_Matrix_eWiseAdd_BinaryOp(visited, GrB_NULL, GrB_NULL, GrB_LOR, visited, front,
+                                     GrB_NULL);
 
         GrB_Matrix_free(&not_visited);
         GrB_Matrix_free(&next_filtered);
@@ -123,7 +118,7 @@ void GBMSBFS::ParseResult() {
     parsed_ = true;
 }
 
-const std::vector<std::vector<GrB_Index>>& GBMSBFS::GetResult() const {
+std::vector<std::vector<GrB_Index>> const& GBMSBFS::GetResult() const {
     if (!parsed_ && parent_ != nullptr) {
         const_cast<GBMSBFS*>(this)->ParseResult();
     }

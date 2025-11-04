@@ -17,7 +17,7 @@ target_include_directories(
         PUBLIC
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../common>"
-        "/opt/homebrew/Cellar/suite-sparse/7.11.0/include/suitesparse"
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../common>"
 )
 
 target_link_libraries(${MST_TARGET_NAME} PRIVATE SuiteSparse::GraphBLAS LAGraphX)

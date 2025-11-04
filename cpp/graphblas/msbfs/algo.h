@@ -1,28 +1,28 @@
 #pragma once
 
+#include <GraphBLAS.h>
+#include <chrono>
+#include <vector>
+
 #include "algorunner.h"
 #include "graph.h"
 
-#include <GraphBLAS.h>
-#include <vector>
-#include <chrono>
-
 class GBMSBFS : public AlgoRunner<std::vector<std::vector<GrB_Index>>> {
 public:
-    explicit GBMSBFS(const std::vector<GrB_Index>& sources);
+    explicit GBMSBFS(std::vector<int> const& sources);
 
-    void RunAlgo(const GBGraph& graph) override;
+    void RunAlgo(GBGraph const& graph) override;
 
-    const std::vector<std::vector<GrB_Index>>& GetResult() const override;
+    std::vector<std::vector<GrB_Index>> const& GetResult() const override;
 
     std::chrono::milliseconds GetExecTime() const;
 
 private:
-    static GrB_Matrix ComputeMSBFScore(const GBGraph& graph, const std::vector<GrB_Index>& sources);
+    static GrB_Matrix ComputeMSBFScore(GBGraph const& graph, std::vector<int> const& sources);
 
     void ParseResult();
 
-    std::vector<GrB_Index> sources_;
+    std::vector<int> sources_;
     mutable GrB_Matrix parent_{nullptr};
     mutable std::vector<std::vector<GrB_Index>> result_;
     std::chrono::milliseconds exec_time_{0};

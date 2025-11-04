@@ -5,6 +5,6 @@
 #include "graph.h"
 
 class Parser {
-   public:
-    GBGraph ParseDIMACS(std::string const& filepath);
+public:
+    GBGraph ParseDIMACS(std::string const& filepath, bool weights = false);
 };

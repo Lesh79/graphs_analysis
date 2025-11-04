@@ -1,11 +1,10 @@
-#pragma once
-
 #include "parser.h"
+
 #include "graph.h"
 
-GBGraph Parser::ParseDIMACS(std::string const& filepath) {
+GBGraph Parser::ParseDIMACS(std::string const& filepath, bool weights) {
     GBGraph graph;
-    
+
     std::ifstream f(filepath);
     if (!f.is_open()) {
         throw std::runtime_error("Failed to open file: " + filepath);
@@ -27,23 +26,25 @@ GBGraph Parser::ParseDIMACS(std::string const& filepath) {
             std::string op;
             iss >> op >> graph.n_nodes >> graph.n_arcs;
 
-            int status = GrB_Matrix_new(&graph.matrix, GrB_UINT64,
-                                        graph.n_nodes, graph.n_nodes);
+            int status = GrB_Matrix_new(&graph.matrix, GrB_UINT64, graph.n_nodes, graph.n_nodes);
             graph.is_inited = true;
         }
 
         if (type == 'a') {
             GrB_Index src, dest;
-            double weight;
+            int weight;
             iss >> src >> dest >> weight;
             if (!graph.is_inited) {
                 throw std::runtime_error("Graph is not inited");
             }
 
-            GrB_Matrix_setElement_UINT64(graph.matrix, weight, src - 1,
-                                         dest - 1);
-            GrB_Matrix_setElement_UINT64(graph.matrix, weight, dest - 1,
-                                         src - 1);
+            if (weight) {
+                GrB_Matrix_setElement_UINT64(graph.matrix, weight, src - 1, dest - 1);
+                GrB_Matrix_setElement_UINT64(graph.matrix, weight, dest - 1, src - 1);
+            } else {
+                GrB_Matrix_setElement_UINT64(graph.matrix, 1, src - 1, dest - 1);
+                GrB_Matrix_setElement_UINT64(graph.matrix, 1, dest - 1, src - 1);
+            }
         }
     }
 

@@ -23,7 +23,7 @@ double PageRankRunner::RunAlgo(SPLAGraph const& graph) {
         A->set_float(src, dest, 1.0 / degree);
     }
 
-    spla::pr(r, A, 0.8, 1e-3, desc);
+    spla::pr(r, A, 0.85, 1e-4, desc);
 
     auto end = std::chrono::high_resolution_clock::now();
 
