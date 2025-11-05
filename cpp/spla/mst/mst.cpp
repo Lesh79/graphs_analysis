@@ -125,4 +125,6 @@ double MSTRunner::RunAlgo(SPLAGraph const& graph) {
     return std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 }
 
-double const& MSTRunner::GetResult() const {}
+double const& MSTRunner::GetResult() const {
+    return weight_;
+}
