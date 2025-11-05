@@ -2,6 +2,9 @@ set(MST_TARGET_NAME spla-mst)
 
 set(MST_SRC_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common/parser.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/mst.cpp
+    
 )
 
 add_executable(${MST_TARGET_NAME} ${MST_SRC_FILES})

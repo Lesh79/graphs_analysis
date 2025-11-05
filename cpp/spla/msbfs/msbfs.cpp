@@ -46,16 +46,9 @@ void MSBFSRunner::ReduceByVectors(spla::ref_ptr<spla::Scalar>& r, spla::ref_ptr<
                                   spla::ref_ptr<spla::OpBinary>& op,
                                   spla::ref_ptr<spla::Descriptor>& desc) {
     spla::ref_ptr<spla::Vector> v = spla::Vector::make(m->get_n_cols(), spla::INT);
-    spla::ref_ptr<spla::Scalar> tmp = spla::Scalar::make_int(0);
 
-    r->set_int(0);
-
-    for (spla::uint i = 0; i < m->get_n_rows(); ++i) {
-        spla::exec_m_extract_row(v, m, i, spla::IDENTITY_INT, desc);
-        spla::exec_v_reduce(tmp, SPLA_ZERO_INT, v, op, desc);
-
-        r->set_int(r->as_int() + tmp->as_int());
-    }
+    spla::exec_m_reduce_by_row(v, m, op, SPLA_ZERO_INT, desc);
+    spla::exec_v_reduce(r, SPLA_ZERO_INT, v, op, desc);
 }
 
 double MSBFSRunner::RunAlgo(SPLAGraph const& graph) {

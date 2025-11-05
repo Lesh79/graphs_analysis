@@ -16,4 +16,7 @@ protected:
 
     spla::ref_ptr<spla::Scalar> SPLA_ZERO_FLOAT = spla::Scalar::make_float(0);
     spla::ref_ptr<spla::Scalar> SPLA_ONE_FLOAT = spla::Scalar::make_float(1);
+
+    spla::ref_ptr<spla::Scalar> SPLA_ZERO_UINT = spla::Scalar::make_uint(0);
+    spla::ref_ptr<spla::Scalar> SPLA_ONE_UINT = spla::Scalar::make_uint(1);
 };
