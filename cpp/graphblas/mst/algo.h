@@ -1,12 +1,12 @@
 #pragma once
 
-#include "algorunner.h"
-#include "graph.h"
-
 #include <GraphBLAS.h>
 #include <LAGraph.h>
-#include <vector>
 #include <chrono>
+#include <vector>
+
+#include "algorunner.h"
+#include "graph.h"
 
 struct GBTree {
     GrB_Index num_vertices;
@@ -18,12 +18,12 @@ class GBMST : public AlgoRunner<GBTree> {
 public:
     GBMST();
 
-    void RunAlgo(const GBGraph& graph) override;
-    const GBTree& GetResult() const override;
+    void RunAlgo(GBGraph const& graph) override;
+    GBTree const& GetResult() const override;
     std::chrono::milliseconds GetExecTime() const;
 
 private:
-    void ComputeMST(const GBGraph& graph);
+    void ComputeMST(GBGraph const& graph);
     void ParseResult();
 
     char msg_[LAGRAPH_MSG_LEN];

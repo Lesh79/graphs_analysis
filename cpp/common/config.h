@@ -13,7 +13,7 @@ protected:
     std::string graph_path_;
 
 public:
-    Config(std::string const& graph_path) : graph_path_(graph_path) {};
+    Config(std::string const& graph_path) : graph_path_(graph_path) {}
 
     std::string const& GetGraphPath() const {
         return graph_path_;
