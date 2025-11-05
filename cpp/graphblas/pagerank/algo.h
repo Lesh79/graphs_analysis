@@ -1,25 +1,25 @@
 #pragma once
 
-#include "algorunner.h"
-#include "graph.h"
-
 #include <GraphBLAS.h>
 #include <LAGraph.h>
-#include <vector>
 #include <chrono>
+#include <vector>
+
+#include "algorunner.h"
+#include "graph.h"
 
 class GBPageRank : public AlgoRunner<std::vector<double>> {
 public:
     explicit GBPageRank(double alpha = 0.85, double eps = 1e-6, int max_iter = 10000);
 
-    void RunAlgo(const GBGraph& graph) override;
+    void RunAlgo(GBGraph const& graph) override;
 
-    const std::vector<double>& GetResult() const override;
+    std::vector<double> const& GetResult() const override;
 
     std::chrono::milliseconds GetExecTime() const;
 
 private:
-    GrB_Vector ComputePageRankCore(const GBGraph& graph, double alpha, double eps, int max_iter);
+    GrB_Vector ComputePageRankCore(GBGraph const& graph, double alpha, double eps, int max_iter);
     void ParseResult();
 
     double alpha_;

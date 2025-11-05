@@ -1,15 +1,15 @@
 #include "algo.h"
 
-#include <stdexcept>
-#include <limits>
-#include <vector>
 #include <chrono>
+#include <limits>
+#include <stdexcept>
+#include <vector>
 
 using clocks = std::chrono::steady_clock;
 
 GBSSBFS::GBSSBFS(GrB_Index source) : source_(source) {}
 
-void GBSSBFS::RunAlgo(const GBGraph &graph) {
+void GBSSBFS::RunAlgo(GBGraph const& graph) {
     if (!graph.is_inited || graph.matrix == nullptr) {
         throw std::runtime_error("Graph not initialized");
     }
@@ -26,10 +26,10 @@ void GBSSBFS::RunAlgo(const GBGraph &graph) {
     auto end = clocks::now();
 
     exec_time_ = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    parsed_ = false; 
+    parsed_ = false;
 }
 
-GrB_Vector GBSSBFS::ComputeBFSCore(const GrB_Matrix &A, GrB_Index source) {
+GrB_Vector GBSSBFS::ComputeBFSCore(GrB_Matrix const& A, GrB_Index source) {
     GrB_Index nrows;
     GrB_Matrix_nrows(&nrows, A);
 
@@ -44,8 +44,7 @@ GrB_Vector GBSSBFS::ComputeBFSCore(const GrB_Matrix &A, GrB_Index source) {
     GrB_Vector_setElement_INT64(parent, source, source);
 
     while (true) {
-        GrB_vxm(next_parents, GrB_NULL, GrB_NULL,
-                GxB_ANY_SECONDI_INT64, front, A, GrB_NULL);
+        GrB_vxm(next_parents, GrB_NULL, GrB_NULL, GxB_ANY_SECONDI_INT64, front, A, GrB_NULL);
 
         GrB_Vector not_visited;
         GrB_Vector_new(&not_visited, GrB_BOOL, nrows);
@@ -54,8 +53,8 @@ GrB_Vector GBSSBFS::ComputeBFSCore(const GrB_Matrix &A, GrB_Index source) {
 
         GrB_Vector next_filtered;
         GrB_Vector_new(&next_filtered, GrB_INT64, nrows);
-        GrB_Vector_eWiseMult_BinaryOp(next_filtered, not_visited, GrB_NULL,
-                                      GrB_SECOND_INT64, next_parents, next_parents, GrB_NULL);
+        GrB_Vector_eWiseMult_BinaryOp(next_filtered, not_visited, GrB_NULL, GrB_SECOND_INT64,
+                                      next_parents, next_parents, GrB_NULL);
 
         GrB_Index nvals;
         GrB_Vector_nvals(&nvals, next_filtered);
@@ -65,14 +64,15 @@ GrB_Vector GBSSBFS::ComputeBFSCore(const GrB_Matrix &A, GrB_Index source) {
             break;
         }
 
-        GrB_Vector_assign(parent, next_filtered, GrB_NULL, next_filtered, GrB_ALL, nrows, GrB_DESC_S);
+        GrB_Vector_assign(parent, next_filtered, GrB_NULL, next_filtered, GrB_ALL, nrows,
+                          GrB_DESC_S);
 
         GrB_Vector_free(&front);
         GrB_Vector_new(&front, GrB_BOOL, nrows);
         GrB_Vector_assign_BOOL(front, next_filtered, GrB_NULL, true, GrB_ALL, nrows, GrB_DESC_S);
 
-        GrB_Vector_eWiseAdd_BinaryOp(visited, GrB_NULL, GrB_NULL,
-                                     GrB_LOR, visited, front, GrB_NULL);
+        GrB_Vector_eWiseAdd_BinaryOp(visited, GrB_NULL, GrB_NULL, GrB_LOR, visited, front,
+                                     GrB_NULL);
 
         GrB_Vector_free(&not_visited);
         GrB_Vector_free(&next_filtered);
@@ -110,9 +110,9 @@ void GBSSBFS::ParseResult() {
     parsed_ = true;
 }
 
-const std::vector<GrB_Index> &GBSSBFS::GetResult() const {
+std::vector<GrB_Index> const& GBSSBFS::GetResult() const {
     if (!parsed_ && parent_ != nullptr) {
-        const_cast<GBSSBFS *>(this)->ParseResult();
+        const_cast<GBSSBFS*>(this)->ParseResult();
     }
     return result_;
 }

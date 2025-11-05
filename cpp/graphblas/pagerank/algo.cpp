@@ -1,16 +1,17 @@
 #include "algo.h"
-#include <stdexcept>
-#include <vector>
+
+#include <LAGraph.h>
 #include <chrono>
 #include <iostream>
-#include <LAGraph.h>
+#include <stdexcept>
+#include <vector>
 
 using clocks = std::chrono::steady_clock;
 
 GBPageRank::GBPageRank(double alpha, double eps, int max_iter)
     : alpha_(alpha), eps_(eps), max_iter_(max_iter) {}
 
-void GBPageRank::RunAlgo(const GBGraph& graph) {
+void GBPageRank::RunAlgo(GBGraph const& graph) {
     if (!graph.is_inited || graph.matrix == nullptr) {
         throw std::runtime_error("Graph not initialized");
     }
@@ -29,7 +30,8 @@ void GBPageRank::RunAlgo(const GBGraph& graph) {
     parsed_ = false;
 }
 
-GrB_Vector GBPageRank::ComputePageRankCore(const GBGraph& graph, double alpha, double eps, int max_iter) {
+GrB_Vector GBPageRank::ComputePageRankCore(GBGraph const& graph, double alpha, double eps,
+                                           int max_iter) {
     GrB_Vector rank;
     GrB_Vector_new(&rank, GrB_FP64, graph.n_nodes);
 
@@ -72,8 +74,7 @@ void GBPageRank::ParseResult() {
     parsed_ = true;
     result_.clear();
 
-    if (rank_ == nullptr)
-        return;
+    if (rank_ == nullptr) return;
 
     GrB_Index n;
     GrB_Vector_size(&n, rank_);
@@ -89,9 +90,8 @@ void GBPageRank::ParseResult() {
     }
 }
 
-const std::vector<double>& GBPageRank::GetResult() const {
-    if (!parsed_ && rank_ != nullptr)
-        const_cast<GBPageRank*>(this)->ParseResult();
+std::vector<double> const& GBPageRank::GetResult() const {
+    if (!parsed_ && rank_ != nullptr) const_cast<GBPageRank*>(this)->ParseResult();
     return result_;
 }
 

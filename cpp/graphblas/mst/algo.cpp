@@ -1,14 +1,15 @@
 #include "algo.h"
-#include <stdexcept>
-#include <iostream>
-#include <chrono>
+
 #include <LAGraphX.h>
+#include <chrono>
+#include <iostream>
+#include <stdexcept>
 
 using clock_ = std::chrono::steady_clock;
 
 GBMST::GBMST() = default;
 
-void GBMST::RunAlgo(const GBGraph& graph) {
+void GBMST::RunAlgo(GBGraph const& graph) {
     if (!graph.is_inited || graph.matrix == nullptr) {
         throw std::runtime_error("Graph not initialized");
     }
@@ -28,20 +29,15 @@ void GBMST::RunAlgo(const GBGraph& graph) {
     parsed_ = false;
 }
 
-void GBMST::ComputeMST(const GBGraph& graph) {
+void GBMST::ComputeMST(GBGraph const& graph) {
     int status = LAGraph_msf(&mst_matrix_, &component_vec_, graph.matrix, false, msg_);
     if (status != GrB_SUCCESS) {
         throw std::runtime_error(std::string("LAGraph_msf failed: ") + msg_);
     }
 
     uint64_t total_weight = 0;
-    status = GrB_Matrix_reduce_UINT64(
-        &total_weight,
-        GrB_NULL,
-        GrB_PLUS_MONOID_UINT64,
-        mst_matrix_,
-        GrB_NULL
-    );
+    status = GrB_Matrix_reduce_UINT64(&total_weight, GrB_NULL, GrB_PLUS_MONOID_UINT64, mst_matrix_,
+                                      GrB_NULL);
     if (status != GrB_SUCCESS) {
         throw std::runtime_error("Failed to reduce MST matrix");
     }
@@ -70,9 +66,8 @@ void GBMST::ParseResult() {
     parsed_ = true;
 }
 
-const GBTree& GBMST::GetResult() const {
-    if (!parsed_ && mst_matrix_ != nullptr)
-        const_cast<GBMST*>(this)->ParseResult();
+GBTree const& GBMST::GetResult() const {
+    if (!parsed_ && mst_matrix_ != nullptr) const_cast<GBMST*>(this)->ParseResult();
     return result_;
 }
 
