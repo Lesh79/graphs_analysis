@@ -46,19 +46,7 @@ double MSTRunner::RunAlgo(SPLAGraph const& graph) {
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    int iter = 0;
-    std::cout << "S_size: " << S_size->as_int() << std::endl;
     while (!S_empty) {
-        std::cout << "----- Iter " << iter++ << " -----" << std::endl;
-        // std::cout << "----- S -----" << std::endl;
-        // for (int i = 0; i < N; ++i) {
-        //     for (int j = 0; j < N; ++j) {
-        //         int x;
-        //         S->get_int(i, j, x);
-        //         std::cout << x << ' ';
-        //     }
-        //     std::cout << std::endl;
-        // }
         mask->clear();
         t->clear();
         index->clear();
@@ -77,13 +65,7 @@ double MSTRunner::RunAlgo(SPLAGraph const& graph) {
             } else {
                 cedge->set_int(parent_index - 1, std::min(edge_v, cedge_v));
             }
-        }
-
-        for (int i = 0; i < N; ++i) {
-            int parent_index, edge_v, cedge_v;
-            parent_->get_int(i, parent_index);
             cedge->get_int(parent_index - 1, cedge_v);
-            edge->get_int(i, edge_v);
             t->set_int(i, N);
             if (edge_v == cedge_v) {
                 mask->set_int(i, 1);
@@ -106,19 +88,6 @@ double MSTRunner::RunAlgo(SPLAGraph const& graph) {
             index->set_int(i, t_v);
         }
 
-        // std::cout << "edge | parent | cedge | mask | index | t" << std::endl;
-        // for (int i = 0; i < N; ++i) {
-        //     int x1, x2, x3, x4, x5, x6;
-        //     edge->get_int(i, x1);
-        //     parent_->get_int(i, x2);
-        //     cedge->get_int(i, x3);
-        //     mask->get_int(i, x4);
-        //     index->get_int(i, x5);
-        //     t->get_int(i, x6);
-        //     std::cout << x1 << ' ' << x2 << ' ' << x3 << ' ' << x4 << ' ' << x5 << ' ' << x6
-        //               << std::endl;
-        // }
-
         spla::exec_v_eadd(parent_updated, parent_, edge, spla::MIN_INT, desc);
         std::swap(parent_, parent_updated);
 
@@ -140,9 +109,7 @@ double MSTRunner::RunAlgo(SPLAGraph const& graph) {
             int row_parent, col_parent;
             parent_->get_int(row, row_parent);
             parent_->get_int(col, col_parent);
-            // std::cout << "RowCol: " << row << ' ' << col << std::endl;
 
-            // std::cout << "Parents: " << row_parent << ' ' << col_parent << std::endl;
             if (row_parent != col_parent) {
                 S_new->set_int(row, col, values[i]);
             }
@@ -151,8 +118,6 @@ double MSTRunner::RunAlgo(SPLAGraph const& graph) {
 
         ReduceByVectors(S_size, S, spla::PLUS_INT, desc);
         S_empty = S_size->as_int() <= 0;
-
-        std::cout << "S_size: " << S_size->as_int() << std::endl;
     }
 
     auto end = std::chrono::high_resolution_clock::now();
