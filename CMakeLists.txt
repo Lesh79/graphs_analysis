@@ -14,5 +14,3 @@ set(SPLA_BUILD_EXAMPLES OFF CACHE BOOL "Disable building of Spla examples" FORCE
 set(SPLA_BUILD_OPENCL ON CACHE BOOL "Build library with opencl backend" FORCE)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external/spla)
-
-include_directories("/opt/homebrew/Cellar/suite-sparse/7.11.0/include/suitesparse")
