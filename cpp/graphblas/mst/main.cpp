@@ -3,18 +3,32 @@
 #include <iostream>
 
 #include "algo.h"
+#include "mst_config.h"
 #include "parser.h"
 
-int main() {
+int main(int argc, char** argv) {
+    if (argc < 2) {
+        std::cerr << "Usage: " << argv[0] << " <path_to_configs_dir>\n";
+        return 1;
+    }
+
     GrB_init(GrB_NONBLOCKING);
+    LAGraph_Init(NULL);
+
+    MSTConfig config =
+        MSTConfig::Parse(std::string(argv[1]) + "/mst.ini");
 
     Parser parser;
-    GBGraph graph = parser.ParseDIMACS("/home/maybenotilya/proj/graphs_analysis/data/NY.gr");
-    std::cout << "Graph: " << graph.n_nodes << ' ' << graph.n_arcs << std::endl;
+    GBGraph graph = parser.ParseDIMACS(config.GetGraphPath(), false);
 
     GBMST mst;
     mst.RunAlgo(graph);
-    std::cout << "MST total weight: " << mst.GetResult().total_weight << std::endl;
+
+    std::cout << mst.GetExecTime().count() << std::endl;
+
+    GrB_Matrix_free(&graph.matrix);
+    LAGraph_Finalize(NULL);
+    GrB_finalize();
 
     return 0;
 }

@@ -20,4 +20,4 @@ target_include_directories(
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../common>"
 )
 
-target_link_libraries(${MST_TARGET_NAME} PRIVATE SuiteSparse::GraphBLAS LAGraphX)
+target_link_libraries(${MST_TARGET_NAME} PRIVATE SuiteSparse::GraphBLAS LAGraph LAGraphX)
