@@ -11,8 +11,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    MSBFSConfig config =
-        MSBFSConfig::Parse(std::string(argv[1]) + "/msbfs.ini");
+    MSBFSConfig config = MSBFSConfig::Parse(std::string(argv[1]) + "/msbfs.ini");
     Parser parser;
     SPLAGraph graph = parser.ParseDIMACS(config.GetGraphPath(), false);
     MSBFSRunner runner(config.GetStartingVertices());

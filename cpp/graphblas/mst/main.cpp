@@ -15,8 +15,7 @@ int main(int argc, char** argv) {
     GrB_init(GrB_NONBLOCKING);
     LAGraph_Init(NULL);
 
-    MSTConfig config =
-        MSTConfig::Parse(std::string(argv[1]) + "/mst.ini");
+    MSTConfig config = MSTConfig::Parse(std::string(argv[1]) + "/mst.ini");
 
     Parser parser;
     GBGraph graph = parser.ParseDIMACS(config.GetGraphPath(), false);

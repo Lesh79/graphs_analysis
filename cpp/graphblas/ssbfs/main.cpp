@@ -2,8 +2,8 @@
 #include <iostream>
 
 #include "algo.h"
-#include "ssbfs_config.h"
 #include "parser.h"
+#include "ssbfs_config.h"
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -13,8 +13,7 @@ int main(int argc, char** argv) {
 
     GrB_init(GrB_NONBLOCKING);
 
-    SSBFSConfig config =
-        SSBFSConfig::Parse(std::string(argv[1]) + "/ssbfs.ini");
+    SSBFSConfig config = SSBFSConfig::Parse(std::string(argv[1]) + "/ssbfs.ini");
 
     Parser parser;
     GBGraph graph = parser.ParseDIMACS(config.GetGraphPath(), false);
