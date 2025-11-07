@@ -1,9 +1,11 @@
+#include <GraphBLAS.h>
+#include <limits>
+#include <stdexcept>
+
 #include <gtest/gtest.h>
+
 #include "cpp/graphblas/msbfs/algo.h"
 #include "graph.h"
-#include <GraphBLAS.h>
-#include <stdexcept>
-#include <limits>
 
 class GBMSBFSTest : public ::testing::Test {
 protected:

@@ -1,10 +1,12 @@
+#include <stdexcept>
+
 #include <gtest/gtest.h>
+
+#include "GraphBLAS.h"
+#include "LAGraph.h"
 #include "cpp/graphblas/pagerank/algo.h"
 #include "graph.h"
 #include "parser.h"
-#include "LAGraph.h"
-#include "GraphBLAS.h"
-#include <stdexcept>
 
 class PageRankTest : public ::testing::Test {
 protected:

@@ -1,7 +1,9 @@
-#include <gtest/gtest.h>
 #include <fstream>
-#include "parser.h"
+
+#include <gtest/gtest.h>
+
 #include "graph.h"
+#include "parser.h"
 
 class DimacsParserTest : public ::testing::Test {
 protected:

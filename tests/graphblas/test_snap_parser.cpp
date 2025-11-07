@@ -1,8 +1,10 @@
-#include <gtest/gtest.h>
-#include <fstream>
 #include <cstdio>
-#include "parser.h"
+#include <fstream>
+
+#include <gtest/gtest.h>
+
 #include "graph.h"
+#include "parser.h"
 
 class SnapParserTest : public ::testing::Test {
 protected:
