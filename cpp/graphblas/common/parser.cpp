@@ -26,7 +26,7 @@ GBGraph Parser::ParseDIMACS(std::string const& filepath, bool weights) {
             std::string op;
             iss >> op >> graph.n_nodes >> graph.n_arcs;
 
-            int status = GrB_Matrix_new(&graph.matrix, GrB_UINT64, graph.n_nodes, graph.n_nodes);
+            int status = GrB_Matrix_new(&graph.matrix, GrB_INT64, graph.n_nodes, graph.n_nodes);
             graph.is_inited = true;
         }
 
@@ -39,11 +39,11 @@ GBGraph Parser::ParseDIMACS(std::string const& filepath, bool weights) {
             }
 
             if (weight) {
-                GrB_Matrix_setElement_UINT64(graph.matrix, weight, src - 1, dest - 1);
-                GrB_Matrix_setElement_UINT64(graph.matrix, weight, dest - 1, src - 1);
+                GrB_Matrix_setElement_INT64(graph.matrix, weight, src - 1, dest - 1);
+                GrB_Matrix_setElement_INT64(graph.matrix, weight, dest - 1, src - 1);
             } else {
-                GrB_Matrix_setElement_UINT64(graph.matrix, 1, src - 1, dest - 1);
-                GrB_Matrix_setElement_UINT64(graph.matrix, 1, dest - 1, src - 1);
+                GrB_Matrix_setElement_INT64(graph.matrix, 1, src - 1, dest - 1);
+                GrB_Matrix_setElement_INT64(graph.matrix, 1, dest - 1, src - 1);
             }
         }
     }
@@ -76,7 +76,7 @@ GBGraph Parser::ParseSNAP(std::string const& filepath) {
     }
 
     std::vector<GrB_Index> I, J;
-    std::vector<uint64_t> X;
+    std::vector<int64_t> X;
     I.reserve(n_edges);
     J.reserve(n_edges);
     X.reserve(n_edges);
@@ -92,9 +92,8 @@ GBGraph Parser::ParseSNAP(std::string const& filepath) {
         X.push_back(1);
     }
 
-    GrB_Matrix_new(&graph.matrix, GrB_UINT64, n_nodes, n_nodes);
-    GrB_Matrix_build_UINT64(graph.matrix, I.data(), J.data(), X.data(), I.size(),
-                            GrB_SECOND_UINT64);
+    GrB_Matrix_new(&graph.matrix, GrB_INT64, n_nodes, n_nodes);
+    GrB_Matrix_build_INT64(graph.matrix, I.data(), J.data(), X.data(), I.size(), GrB_SECOND_INT64);
 
     graph.n_nodes = n_nodes;
     graph.n_arcs = n_edges;
