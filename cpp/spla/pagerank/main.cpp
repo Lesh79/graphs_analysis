@@ -13,8 +13,7 @@ int main(int argc, char** argv) {
 
     PRConfig config = PRConfig::Parse(std::string(argv[1]) + "/pr.ini");
     Parser parser;
-    auto [graph, indices] =
-            parser.ParseSNAP(config.GetGraphPath());
+    auto [graph, indices] = parser.ParseSNAP(config.GetGraphPath());
     PageRankRunner runner(indices, config.GetDampingFactor(), config.GetTolerance());
     auto time = runner.RunAlgo(graph);
     std::cout << time << std::endl;

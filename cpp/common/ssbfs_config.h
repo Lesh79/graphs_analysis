@@ -18,7 +18,7 @@ public:
         return starting_vertex_;
     }
 
-    static SSBFSConfig Parse(const std::string& config_path) {
+    static SSBFSConfig Parse(std::string const& config_path) {
         std::ifstream fin(config_path);
         if (!fin.is_open()) {
             throw std::runtime_error("Failed to open file " + config_path);

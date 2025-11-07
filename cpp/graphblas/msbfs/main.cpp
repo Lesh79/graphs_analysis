@@ -10,11 +10,10 @@ int main(int argc, char** argv) {
         std::cerr << "Usage: " << argv[0] << " <path_to_configs_dir>\n";
         return 1;
     }
-    
+
     GrB_init(GrB_NONBLOCKING);
 
-    MSBFSConfig config =
-        MSBFSConfig::Parse(std::string(argv[1]) + "/msbfs.ini");
+    MSBFSConfig config = MSBFSConfig::Parse(std::string(argv[1]) + "/msbfs.ini");
 
     Parser parser;
     GBGraph graph = parser.ParseDIMACS(config.GetGraphPath(), false);
