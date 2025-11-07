@@ -4,40 +4,30 @@
 
 #include "algo.h"
 #include "parser.h"
+#include "pr_config.h"
 
-int main() {
+int main(int argc, char** argv) {
+    if (argc < 2) {
+        std::cerr << "Usage: " << argv[0] << " <path_to_configs_dir>\n";
+        return 1;
+    }
+
     GrB_init(GrB_NONBLOCKING);
-
     LAGraph_Init(NULL);
 
-    GBGraph graph;
-    graph.n_nodes = 4;
-    GrB_Matrix_new(&graph.matrix, GrB_FP64, graph.n_nodes, graph.n_nodes);
+    PRConfig config = PRConfig::Parse(std::string(argv[1]) + "/pr.ini");
 
-    auto add_edge = [&](GrB_Index from, GrB_Index to) {
-        GrB_Matrix_setElement_FP64(graph.matrix, 1.0, from, to);
-    };
+    Parser parser;
+    GBGraph graph = parser.ParseSNAP(config.GetGraphPath());
 
-    add_edge(0, 1);
-    add_edge(0, 2);
-    add_edge(1, 2);
-    add_edge(2, 0);
-    add_edge(2, 3);
-    add_edge(3, 0);
-
-    graph.is_inited = true;
-
-    GBPageRank pagerank(0.85, 1e-4, 100);
+    GBPageRank pagerank(config.GetDampingFactor(), config.GetTolerance(), 100);
     pagerank.RunAlgo(graph);
 
-    std::cout << "PageRank result: ";
-    double s = 0.0;
-    for (auto const& val : pagerank.GetResult()) {
-        s += val;
-        std::cout << val << ' ';
-    }
-    std::cout << s << std::endl;
-    std::cout << std::endl;
+    std::cout << pagerank.GetExecTime().count() << std::endl;
+
+    GrB_Matrix_free(&graph.matrix);
+    LAGraph_Finalize(NULL);
+    GrB_finalize();
 
     return 0;
 }
