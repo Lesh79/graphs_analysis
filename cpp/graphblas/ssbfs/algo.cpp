@@ -52,7 +52,8 @@ GrB_Vector GBSSBFS::ComputeBFSCore(GrB_Matrix const& A, GrB_Index source) {
 
         GrB_Vector next_filtered;
         GrB_Vector_new(&next_filtered, GrB_INT64, nrows);
-        GrB_Vector_apply(next_filtered, not_visited, GrB_NULL, GrB_IDENTITY_INT64, next_parents, GrB_NULL);
+        GrB_Vector_apply(next_filtered, not_visited, GrB_NULL, GrB_IDENTITY_INT64, next_parents,
+                         GrB_NULL);
 
         GrB_Index nvals;
         GrB_Vector_nvals(&nvals, next_filtered);

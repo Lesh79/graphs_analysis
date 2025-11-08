@@ -23,8 +23,6 @@ int main(int argc, char** argv) {
 
     std::cout << bfs.GetExecTime().count() << std::endl;
 
-    auto const& parents = bfs.GetResult();
-
     GrB_Matrix_free(&graph.matrix);
     GrB_finalize();
     return 0;
