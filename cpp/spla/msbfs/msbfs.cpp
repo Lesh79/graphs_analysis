@@ -3,18 +3,6 @@
 #include <chrono>
 #include <limits.h>
 
-void print_m(spla::ref_ptr<spla::Matrix> const& m, std::string const& name) {
-    std::cout << "-- " << name << " --\n";
-    for (spla::uint i = 0; i < m->get_n_rows(); ++i) {
-        for (spla::uint j = 0; j < m->get_n_cols(); ++j) {
-            int32_t x;
-            m->get_int(i, j, x);
-            std::cout << x << ' ';
-        }
-        std::cout << std::endl;
-    }
-}
-
 void MSBFSRunner::ApplyMaskOnFront(spla::ref_ptr<spla::Matrix>& front,
                                    spla::ref_ptr<spla::Matrix>& mask,
                                    spla::ref_ptr<spla::Descriptor>& desc) {
