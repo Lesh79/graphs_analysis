@@ -11,7 +11,7 @@ private:
     std::vector<int> starting_vertices_;
 
 public:
-    MSBFSConfig(std::string graph_path, std::vector<int> starting_vertices)
+    MSBFSConfig(std::string graph_path, std::vector<int> starting_vertices = {0})
         : Config(graph_path), starting_vertices_(starting_vertices) {}
 
     std::vector<int> const& GetStartingVertices() const {

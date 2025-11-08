@@ -11,7 +11,7 @@ private:
     int starting_vertex_;
 
 public:
-    SSBFSConfig(std::string graph_path, int starting_vertex)
+    SSBFSConfig(std::string graph_path, int starting_vertex = 0)
         : Config(graph_path), starting_vertex_(starting_vertex) {}
 
     int GetStartingVertex() const {
