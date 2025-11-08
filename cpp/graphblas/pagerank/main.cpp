@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
     Parser parser;
     GBGraph graph = parser.ParseSNAP(config.GetGraphPath());
 
-    GBPageRank pagerank(config.GetDampingFactor(), config.GetTolerance(), 100);
+    GBPageRank pagerank(config.GetDampingFactor(), config.GetTolerance(), config.GetMaxIter());
     pagerank.RunAlgo(graph);
 
     std::cout << pagerank.GetExecTime().count() << std::endl;

@@ -9,10 +9,11 @@ class PRConfig : public Config {
 private:
     double damp_;
     double tol_;
+    int max_iter_;
 
 public:
-    PRConfig(std::string graph_path, double damp = 0.85, double tol = 0.001)
-        : Config(graph_path), damp_(damp), tol_(tol) {}
+    PRConfig(std::string graph_path, double damp = 0.85, double tol = 0.001, int max_iter = 100)
+        : Config(graph_path), damp_(damp), tol_(tol), max_iter_(max_iter) {}
 
     double GetDampingFactor() const {
         return damp_;
@@ -20,6 +21,10 @@ public:
 
     double GetTolerance() const {
         return tol_;
+    }
+
+    int GetMaxIter() const {
+        return max_iter_;
     }
 
     static PRConfig Parse(std::string config_path) {
@@ -32,6 +37,7 @@ public:
         std::string graph_path;
         double damp = 0.85;
         double tol = 0.001;
+        int max_iter = 100;
 
         while (std::getline(fin, line)) {
             line = Trim(line);
@@ -53,10 +59,12 @@ public:
                 damp = std::stod(value);
             } else if (key == "Tolerance") {
                 tol = std::stod(value);
+            } else if (key == "MaxIter") {
+                max_iter = std::stoi(value);
             } else {
                 throw std::runtime_error("Wrong key: " + key);
             }
         }
-        return PRConfig(graph_path, damp, tol);
+        return PRConfig(graph_path, damp, tol, max_iter);
     }
 };

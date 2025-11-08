@@ -88,6 +88,7 @@ GBGraph Parser::ParseSNAP(std::string const& filepath) {
         std::istringstream iss(line);
         GrB_Index src, dest;
         if (!(iss >> src >> dest)) continue;
+        if (src > graph.n_nodes || dest > graph.n_nodes) continue;
 
         I.push_back(src - 1);
         J.push_back(dest - 1);

@@ -42,7 +42,8 @@ int main(int argc, char** argv) {
     PRConfig config = PRConfig::Parse(std::string(argv[1]));
     Parser parser;
     auto [graph, indices] = parser.ParseSNAP(config.GetGraphPath());
-    PageRankRunner runner(indices, config.GetDampingFactor(), config.GetTolerance());
+    PageRankRunner runner(indices, config.GetDampingFactor(), config.GetTolerance(),
+                          config.GetMaxIter());
     auto time = runner.RunAlgo(graph);
     std::cout << time << std::endl;
     runner.GetResult();

@@ -75,6 +75,10 @@ std::pair<SPLAGraph, std::vector<std::pair<int, int>>> Parser::ParseSNAP(
 
         int src, dest;
         iss >> src >> dest;
+        if (src > graph.n_vertices || dest > graph.n_vertices) {
+            continue;
+        }
+
         indices.push_back({src - 1, dest - 1});
         graph.matrix->set_int(src - 1, dest - 1, 1);
     }
