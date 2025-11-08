@@ -30,8 +30,8 @@ public:
         std::string line;
 
         std::string graph_path;
-        double damp;
-        double tol;
+        double damp = 0.85;
+        double tol = 0.001;
 
         while (std::getline(fin, line)) {
             line = Trim(line);
