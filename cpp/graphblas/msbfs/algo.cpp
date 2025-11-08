@@ -57,7 +57,8 @@ GrB_Matrix GBMSBFS::ComputeMSBFScore(GBGraph const& graph, std::vector<int> cons
 
         GrB_Matrix next_filtered;
         GrB_Matrix_new(&next_filtered, GrB_INT64, nsources, nrows);
-        GrB_Matrix_apply(next_filtered, not_visited, GrB_NULL, GrB_IDENTITY_INT64, next_parents, GrB_NULL);
+        GrB_Matrix_apply(next_filtered, not_visited, GrB_NULL, GrB_IDENTITY_INT64, next_parents,
+                         GrB_NULL);
 
         GrB_Index nvals;
         GrB_Matrix_nvals(&nvals, next_filtered);
