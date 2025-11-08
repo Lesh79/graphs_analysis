@@ -11,7 +11,7 @@ private:
     double tol_;
 
 public:
-    PRConfig(std::string graph_path, double damp, double tol)
+    PRConfig(std::string graph_path, double damp = 0.85, double tol = 0.001)
         : Config(graph_path), damp_(damp), tol_(tol) {}
 
     double GetDampingFactor() const {
