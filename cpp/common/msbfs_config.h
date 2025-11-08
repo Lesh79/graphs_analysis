@@ -58,6 +58,10 @@ public:
             }
         }
 
-        return MSBFSConfig(graph_path, starting_vertices);
+        if (starting_vertices.empty()) {
+            return MSBFSConfig(graph_path, {0});
+        } else {
+            return MSBFSConfig(graph_path, starting_vertices);
+        }
     }
 };

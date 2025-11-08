@@ -26,7 +26,7 @@ public:
 
         std::string line;
         std::string graph_path;
-        int starting_vertex = -1;
+        int starting_vertex = 0;
 
         while (std::getline(fin, line)) {
             line = Trim(line);
@@ -53,9 +53,6 @@ public:
 
         if (graph_path.empty()) {
             throw std::runtime_error("GraphPath not specified in config: " + config_path);
-        }
-        if (starting_vertex == -1) {
-            throw std::runtime_error("StartingVertex not specified in config: " + config_path);
         }
 
         return SSBFSConfig(graph_path, starting_vertex);
