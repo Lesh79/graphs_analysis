@@ -52,15 +52,12 @@ GrB_Matrix GBMSBFS::ComputeMSBFScore(GBGraph const& graph, std::vector<int> cons
 
         GrB_Matrix not_visited;
         GrB_Matrix_new(&not_visited, GrB_BOOL, nsources, nrows);
-        GrB_Matrix_assign_BOOL(not_visited, GrB_NULL, GrB_NULL, true, GrB_ALL, nsources, GrB_ALL,
-                               nrows, GrB_NULL);
-        GrB_Matrix_assign_BOOL(not_visited, visited, GrB_NULL, false, GrB_ALL, nsources, GrB_ALL,
-                               nrows, GrB_DESC_S);
+        GrB_Matrix_assign_BOOL(not_visited, visited, GrB_NULL, true, GrB_ALL, nsources, GrB_ALL,
+                               nrows, GrB_DESC_C);
 
         GrB_Matrix next_filtered;
         GrB_Matrix_new(&next_filtered, GrB_INT64, nsources, nrows);
-        GrB_Matrix_eWiseMult_BinaryOp(next_filtered, not_visited, GrB_NULL, GrB_SECOND_INT64,
-                                      next_parents, next_parents, GrB_NULL);
+        GrB_Matrix_apply(next_filtered, not_visited, GrB_NULL, GrB_IDENTITY_INT64, next_parents, GrB_NULL);
 
         GrB_Index nvals;
         GrB_Matrix_nvals(&nvals, next_filtered);
