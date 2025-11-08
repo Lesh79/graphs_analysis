@@ -1,5 +1,7 @@
 #include "parser.h"
 
+#include <vector>
+
 #include "graph.h"
 
 GBGraph Parser::ParseDIMACS(std::string const& filepath, bool weights) {

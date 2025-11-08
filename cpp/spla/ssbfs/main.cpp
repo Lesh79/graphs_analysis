@@ -1,9 +1,9 @@
 #include <iostream>
 #include <spla.hpp>
 
-#include "msbfs.h"
-#include "msbfs_config.h"
 #include "parser.h"
+#include "ssbfs.h"
+#include "ssbfs_config.h"
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -11,10 +11,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    MSBFSConfig config = MSBFSConfig::Parse(std::string(argv[1]));
+    SSBFSConfig config = SSBFSConfig::Parse(std::string(argv[1]));
     Parser parser;
     SPLAGraph graph = parser.ParseDIMACS(config.GetGraphPath(), false);
-    MSBFSRunner runner(config.GetStartingVertices());
+    SSBFSRunner runner(config.GetStartingVertex());
     auto time = runner.RunAlgo(graph);
     std::cout << time << std::endl;
     return 0;

@@ -7,13 +7,13 @@
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <path_to_configs_dir>\n";
+        std::cerr << "Usage: " << argv[0] << " <path_to_config>\n";
         return 1;
     }
 
     GrB_init(GrB_NONBLOCKING);
 
-    SSBFSConfig config = SSBFSConfig::Parse(std::string(argv[1]) + "/ssbfs.ini");
+    SSBFSConfig config = SSBFSConfig::Parse(std::string(argv[1]));
 
     Parser parser;
     GBGraph graph = parser.ParseDIMACS(config.GetGraphPath(), false);

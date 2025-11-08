@@ -7,11 +7,11 @@
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <path_to_configs_dir>\n";
+        std::cerr << "Usage: " << argv[0] << " <path_to_config>\n";
         return 1;
     }
 
-    PRConfig config = PRConfig::Parse(std::string(argv[1]) + "/pr.ini");
+    PRConfig config = PRConfig::Parse(std::string(argv[1]));
     Parser parser;
     auto [graph, indices] = parser.ParseSNAP(config.GetGraphPath());
     PageRankRunner runner(indices, config.GetDampingFactor(), config.GetTolerance());

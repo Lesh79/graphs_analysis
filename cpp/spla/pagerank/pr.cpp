@@ -3,8 +3,6 @@
 #include <chrono>
 
 double PageRankRunner::RunAlgo(SPLAGraph const& graph) {
-    auto start = std::chrono::high_resolution_clock::now();
-
     spla::ref_ptr<spla::Descriptor> desc = spla::Descriptor::make();
     desc->set_early_exit(true);
     desc->set_struct_only(true);
@@ -23,11 +21,11 @@ double PageRankRunner::RunAlgo(SPLAGraph const& graph) {
         A->set_float(src, dest, 1.0 / degree);
     }
 
-    spla::pr(r, A, 0.85, 1e-4, desc);
+    auto start = std::chrono::high_resolution_clock::now();
+
+    spla::pr(r, A, damp_, tol_, desc);
 
     auto end = std::chrono::high_resolution_clock::now();
-
-    auto s = spla::Scalar::make_float(0);
 
     return std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 }

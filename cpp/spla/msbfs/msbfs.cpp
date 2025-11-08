@@ -42,18 +42,7 @@ void MSBFSRunner::ApplyMaskOnFront(spla::ref_ptr<spla::Matrix>& front,
     }
 }
 
-void MSBFSRunner::ReduceByVectors(spla::ref_ptr<spla::Scalar>& r, spla::ref_ptr<spla::Matrix>& m,
-                                  spla::ref_ptr<spla::OpBinary>& op,
-                                  spla::ref_ptr<spla::Descriptor>& desc) {
-    spla::ref_ptr<spla::Vector> v = spla::Vector::make(m->get_n_cols(), spla::INT);
-
-    spla::exec_m_reduce_by_row(v, m, op, SPLA_ZERO_INT, desc);
-    spla::exec_v_reduce(r, SPLA_ZERO_INT, v, op, desc);
-}
-
 double MSBFSRunner::RunAlgo(SPLAGraph const& graph) {
-    auto start = std::chrono::high_resolution_clock::now();
-
     spla::ref_ptr<spla::Descriptor> desc = spla::Descriptor::make();
     desc->set_early_exit(true);
     desc->set_struct_only(true);
@@ -86,6 +75,8 @@ double MSBFSRunner::RunAlgo(SPLAGraph const& graph) {
         parents_->set_int(i, s, s + 1);
         ++i;
     }
+
+    auto start = std::chrono::high_resolution_clock::now();
 
     while (!fronts_empty) {
         spla::exec_mxm(p, prev_fronts, graph.matrix, spla::FIRST_INT, spla::MIN_NON_ZERO_INT,
