@@ -21,11 +21,8 @@ void GBMSBFS::RunAlgo(GBGraph const& graph) {
         throw std::runtime_error("Graph matrix must be square");
     }
 
-    auto start = clocks::now();
     parent_ = ComputeMSBFScore(graph, sources_);
-    auto end = clocks::now();
 
-    exec_time_ = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     parsed_ = false;
 }
 
@@ -45,6 +42,8 @@ GrB_Matrix GBMSBFS::ComputeMSBFScore(GBGraph const& graph, std::vector<int> cons
         GrB_Matrix_setElement_BOOL(visited, true, i, sources[i]);
         GrB_Matrix_setElement_INT64(parent, sources[i], i, sources[i]);
     }
+
+    auto start = clocks::now();
 
     while (true) {
         GrB_mxm(next_parents, GrB_NULL, GrB_NULL, GxB_ANY_SECONDI_INT64, front, graph.matrix,
@@ -82,6 +81,10 @@ GrB_Matrix GBMSBFS::ComputeMSBFScore(GBGraph const& graph, std::vector<int> cons
         GrB_Matrix_free(&not_visited);
         GrB_Matrix_free(&next_filtered);
     }
+
+    auto end = clocks::now();
+
+    exec_time_ = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
     GrB_Matrix_free(&front);
     GrB_Matrix_free(&visited);

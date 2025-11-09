@@ -18,7 +18,7 @@ public:
     std::chrono::milliseconds GetExecTime() const;
 
 private:
-    static GrB_Matrix ComputeMSBFScore(GBGraph const& graph, std::vector<int> const& sources);
+    GrB_Matrix ComputeMSBFScore(GBGraph const& graph, std::vector<int> const& sources);
 
     void ParseResult();
 

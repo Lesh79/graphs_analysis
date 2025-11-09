@@ -36,9 +36,9 @@ int PageRankRunner::RunAlgo(SPLAGraph const& graph) {
     r_prev->fill_with(spla::Scalar::make_float(1.0f / static_cast<float>(N)));
 
     float error = tol_ + 0.1f;
-    spla::ref_ptr<spla::OpBinary> abs_diff = spla::OpBinary::make_float(
-            "abs_diff", "[](spla::T_FLOAT a, spla::T_FLOAT b) { return std::abs(a - b); }",
-            [](spla::T_FLOAT a, spla::T_FLOAT b) { return std::abs(a - b); });
+    spla::ref_ptr<spla::OpBinary> abs_diff =
+            spla::OpBinary::make_float("abs_diff", "(float a, float b) { return fabs(a - b); }",
+                                       [](float a, float b) { return fabs(a - b); });
 
     int iter = 0;
     while (iter++ <= max_iter_ && error > tol_) {
@@ -46,8 +46,8 @@ int PageRankRunner::RunAlgo(SPLAGraph const& graph) {
                               spla::ALWAYS_FLOAT, SPLA_ZERO_FLOAT);
         spla::exec_v_eadd(r, r_tmp, addition, spla::PLUS_FLOAT);
 
-        exec_v_eadd(errors, r, r_prev, abs_diff);
-        exec_v_reduce(error2, SPLA_ZERO_FLOAT, errors, spla::PLUS_FLOAT);
+        spla::exec_v_eadd(errors, r, r_prev, abs_diff);
+        spla::exec_v_reduce(error2, SPLA_ZERO_FLOAT, errors, spla::PLUS_FLOAT);
 
         error = error2->as_float();
 

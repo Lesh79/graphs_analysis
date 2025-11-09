@@ -1,0 +1,2142 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" width="20000" height="2134" onload="init(evt)" viewBox="0 0 20000 2134" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<!-- Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples. -->
+<!-- NOTES:  -->
+<defs>
+	<linearGradient id="background" y1="0" y2="1" x1="0" x2="0" >
+		<stop stop-color="#eeeeee" offset="5%" />
+		<stop stop-color="#eeeeb0" offset="95%" />
+	</linearGradient>
+</defs>
+<style type="text/css">
+	text { font-family:Verdana; font-size:12px; fill:rgb(0,0,0); }
+	#search, #ignorecase { opacity:0.1; cursor:pointer; }
+	#search:hover, #search.show, #ignorecase:hover, #ignorecase.show { opacity:1; }
+	#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+	#title { text-anchor:middle; font-size:17px}
+	#unzoom { cursor:pointer; }
+	#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+	.hide { display:none; }
+	.parent { opacity:0.5; }
+</style>
+<script type="text/ecmascript">
+<![CDATA[
+	"use strict";
+	var details, searchbtn, unzoombtn, matchedtxt, svg, searching, currentSearchTerm, ignorecase, ignorecaseBtn;
+	function init(evt) {
+		details = document.getElementById("details").firstChild;
+		searchbtn = document.getElementById("search");
+		ignorecaseBtn = document.getElementById("ignorecase");
+		unzoombtn = document.getElementById("unzoom");
+		matchedtxt = document.getElementById("matched");
+		svg = document.getElementsByTagName("svg")[0];
+		searching = 0;
+		currentSearchTerm = null;
+
+		// use GET parameters to restore a flamegraphs state.
+		var params = get_params();
+		if (params.x && params.y)
+			zoom(find_group(document.querySelector('[x="' + params.x + '"][y="' + params.y + '"]')));
+                if (params.s) search(params.s);
+	}
+
+	// event listeners
+	window.addEventListener("click", function(e) {
+		var target = find_group(e.target);
+		if (target) {
+			if (target.nodeName == "a") {
+				if (e.ctrlKey === false) return;
+				e.preventDefault();
+			}
+			if (target.classList.contains("parent")) unzoom(true);
+			zoom(target);
+			if (!document.querySelector('.parent')) {
+				// we have basically done a clearzoom so clear the url
+				var params = get_params();
+				if (params.x) delete params.x;
+				if (params.y) delete params.y;
+				history.replaceState(null, null, parse_params(params));
+				unzoombtn.classList.add("hide");
+				return;
+			}
+
+			// set parameters for zoom state
+			var el = target.querySelector("rect");
+			if (el && el.attributes && el.attributes.y && el.attributes._orig_x) {
+				var params = get_params()
+				params.x = el.attributes._orig_x.value;
+				params.y = el.attributes.y.value;
+				history.replaceState(null, null, parse_params(params));
+			}
+		}
+		else if (e.target.id == "unzoom") clearzoom();
+		else if (e.target.id == "search") search_prompt();
+		else if (e.target.id == "ignorecase") toggle_ignorecase();
+	}, false)
+
+	// mouse-over for info
+	// show
+	window.addEventListener("mouseover", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = "Function: " + g_to_text(target);
+	}, false)
+
+	// clear
+	window.addEventListener("mouseout", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = ' ';
+	}, false)
+
+	// ctrl-F for search
+	// ctrl-I to toggle case-sensitive search
+	window.addEventListener("keydown",function (e) {
+		if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+			e.preventDefault();
+			search_prompt();
+		}
+		else if (e.ctrlKey && e.keyCode === 73) {
+			e.preventDefault();
+			toggle_ignorecase();
+		}
+	}, false)
+
+	// functions
+	function get_params() {
+		var params = {};
+		var paramsarr = window.location.search.substr(1).split('&');
+		for (var i = 0; i < paramsarr.length; ++i) {
+			var tmp = paramsarr[i].split("=");
+			if (!tmp[0] || !tmp[1]) continue;
+			params[tmp[0]]  = decodeURIComponent(tmp[1]);
+		}
+		return params;
+	}
+	function parse_params(params) {
+		var uri = "?";
+		for (var key in params) {
+			uri += key + '=' + encodeURIComponent(params[key]) + '&';
+		}
+		if (uri.slice(-1) == "&")
+			uri = uri.substring(0, uri.length - 1);
+		if (uri == '?')
+			uri = window.location.href.split('?')[0];
+		return uri;
+	}
+	function find_child(node, selector) {
+		var children = node.querySelectorAll(selector);
+		if (children.length) return children[0];
+	}
+	function find_group(node) {
+		var parent = node.parentElement;
+		if (!parent) return;
+		if (parent.id == "frames") return node;
+		return find_group(parent);
+	}
+	function orig_save(e, attr, val) {
+		if (e.attributes["_orig_" + attr] != undefined) return;
+		if (e.attributes[attr] == undefined) return;
+		if (val == undefined) val = e.attributes[attr].value;
+		e.setAttribute("_orig_" + attr, val);
+	}
+	function orig_load(e, attr) {
+		if (e.attributes["_orig_"+attr] == undefined) return;
+		e.attributes[attr].value = e.attributes["_orig_" + attr].value;
+		e.removeAttribute("_orig_"+attr);
+	}
+	function g_to_text(e) {
+		var text = find_child(e, "title").firstChild.nodeValue;
+		return (text)
+	}
+	function g_to_func(e) {
+		var func = g_to_text(e);
+		// if there's any manipulation we want to do to the function
+		// name before it's searched, do it here before returning.
+		return (func);
+	}
+	function update_text(e) {
+		var r = find_child(e, "rect");
+		var t = find_child(e, "text");
+		var w = parseFloat(r.attributes.width.value) -3;
+		var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+		t.attributes.x.value = parseFloat(r.attributes.x.value) + 3;
+
+		// Smaller than this size won't fit anything
+		if (w < 2 * 12 * 0.59) {
+			t.textContent = "";
+			return;
+		}
+
+		t.textContent = txt;
+		var sl = t.getSubStringLength(0, txt.length);
+		// check if only whitespace or if we can fit the entire string into width w
+		if (/^ *$/.test(txt) || sl < w)
+			return;
+
+		// this isn't perfect, but gives a good starting point
+		// and avoids calling getSubStringLength too often
+		var start = Math.floor((w/sl) * txt.length);
+		for (var x = start; x > 0; x = x-2) {
+			if (t.getSubStringLength(0, x + 2) <= w) {
+				t.textContent = txt.substring(0, x) + "..";
+				return;
+			}
+		}
+		t.textContent = "";
+	}
+
+	// zoom
+	function zoom_reset(e) {
+		if (e.attributes != undefined) {
+			orig_load(e, "x");
+			orig_load(e, "width");
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_reset(c[i]);
+		}
+	}
+	function zoom_child(e, x, ratio) {
+		if (e.attributes != undefined) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = (parseFloat(e.attributes.x.value) - x - 10) * ratio + 10;
+				if (e.tagName == "text")
+					e.attributes.x.value = find_child(e.parentNode, "rect[x]").attributes.x.value + 3;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseFloat(e.attributes.width.value) * ratio;
+			}
+		}
+
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_child(c[i], x - 10, ratio);
+		}
+	}
+	function zoom_parent(e) {
+		if (e.attributes) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = 10;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseInt(svg.width.baseVal.value) - (10 * 2);
+			}
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_parent(c[i]);
+		}
+	}
+	function zoom(node) {
+		var attr = find_child(node, "rect").attributes;
+		var width = parseFloat(attr.width.value);
+		var xmin = parseFloat(attr.x.value);
+		var xmax = parseFloat(xmin + width);
+		var ymin = parseFloat(attr.y.value);
+		var ratio = (svg.width.baseVal.value - 2 * 10) / width;
+
+		// XXX: Workaround for JavaScript float issues (fix me)
+		var fudge = 0.0001;
+
+		unzoombtn.classList.remove("hide");
+
+		var el = document.getElementById("frames").children;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var a = find_child(e, "rect").attributes;
+			var ex = parseFloat(a.x.value);
+			var ew = parseFloat(a.width.value);
+			var upstack;
+			// Is it an ancestor
+			if (0 == 0) {
+				upstack = parseFloat(a.y.value) > ymin;
+			} else {
+				upstack = parseFloat(a.y.value) < ymin;
+			}
+			if (upstack) {
+				// Direct ancestor
+				if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+					e.classList.add("parent");
+					zoom_parent(e);
+					update_text(e);
+				}
+				// not in current path
+				else
+					e.classList.add("hide");
+			}
+			// Children maybe
+			else {
+				// no common path
+				if (ex < xmin || ex + fudge >= xmax) {
+					e.classList.add("hide");
+				}
+				else {
+					zoom_child(e, xmin, ratio);
+					update_text(e);
+				}
+			}
+		}
+		search();
+	}
+	function unzoom(dont_update_text) {
+		unzoombtn.classList.add("hide");
+		var el = document.getElementById("frames").children;
+		for(var i = 0; i < el.length; i++) {
+			el[i].classList.remove("parent");
+			el[i].classList.remove("hide");
+			zoom_reset(el[i]);
+			if(!dont_update_text) update_text(el[i]);
+		}
+		search();
+	}
+	function clearzoom() {
+		unzoom();
+
+		// remove zoom state
+		var params = get_params();
+		if (params.x) delete params.x;
+		if (params.y) delete params.y;
+		history.replaceState(null, null, parse_params(params));
+	}
+
+	// search
+	function toggle_ignorecase() {
+		ignorecase = !ignorecase;
+		if (ignorecase) {
+			ignorecaseBtn.classList.add("show");
+		} else {
+			ignorecaseBtn.classList.remove("show");
+		}
+		reset_search();
+		search();
+	}
+	function reset_search() {
+		var el = document.querySelectorAll("#frames rect");
+		for (var i = 0; i < el.length; i++) {
+			orig_load(el[i], "fill")
+		}
+		var params = get_params();
+		delete params.s;
+		history.replaceState(null, null, parse_params(params));
+	}
+	function search_prompt() {
+		if (!searching) {
+			var term = prompt("Enter a search term (regexp " +
+			    "allowed, eg: ^ext4_)"
+			    + (ignorecase ? ", ignoring case" : "")
+			    + "\nPress Ctrl-i to toggle case sensitivity", "");
+			if (term != null) search(term);
+		} else {
+			reset_search();
+			searching = 0;
+			currentSearchTerm = null;
+			searchbtn.classList.remove("show");
+			searchbtn.firstChild.nodeValue = "Search"
+			matchedtxt.classList.add("hide");
+			matchedtxt.firstChild.nodeValue = ""
+		}
+	}
+	function search(term) {
+		if (term) currentSearchTerm = term;
+		if (currentSearchTerm === null) return;
+
+		var re = new RegExp(currentSearchTerm, ignorecase ? 'i' : '');
+		var el = document.getElementById("frames").children;
+		var matches = new Object();
+		var maxwidth = 0;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var func = g_to_func(e);
+			var rect = find_child(e, "rect");
+			if (func == null || rect == null)
+				continue;
+
+			// Save max width. Only works as we have a root frame
+			var w = parseFloat(rect.attributes.width.value);
+			if (w > maxwidth)
+				maxwidth = w;
+
+			if (func.match(re)) {
+				// highlight
+				var x = parseFloat(rect.attributes.x.value);
+				orig_save(rect, "fill");
+				rect.attributes.fill.value = "rgb(230,0,230)";
+
+				// remember matches
+				if (matches[x] == undefined) {
+					matches[x] = w;
+				} else {
+					if (w > matches[x]) {
+						// overwrite with parent
+						matches[x] = w;
+					}
+				}
+				searching = 1;
+			}
+		}
+		if (!searching)
+			return;
+		var params = get_params();
+		params.s = currentSearchTerm;
+		history.replaceState(null, null, parse_params(params));
+
+		searchbtn.classList.add("show");
+		searchbtn.firstChild.nodeValue = "Reset Search";
+
+		// calculate percent matched, excluding vertical overlap
+		var count = 0;
+		var lastx = -1;
+		var lastw = 0;
+		var keys = Array();
+		for (k in matches) {
+			if (matches.hasOwnProperty(k))
+				keys.push(k);
+		}
+		// sort the matched frames by their x location
+		// ascending, then width descending
+		keys.sort(function(a, b){
+			return a - b;
+		});
+		// Step through frames saving only the biggest bottom-up frames
+		// thanks to the sort order. This relies on the tree property
+		// where children are always smaller than their parents.
+		var fudge = 0.0001;	// JavaScript floating point
+		for (var k in keys) {
+			var x = parseFloat(keys[k]);
+			var w = matches[keys[k]];
+			if (x >= lastx + lastw - fudge) {
+				count += w;
+				lastx = x;
+				lastw = w;
+			}
+		}
+		// display matched percent
+		matchedtxt.classList.remove("hide");
+		var pct = 100 * count / maxwidth;
+		if (pct != 100) pct = pct.toFixed(1)
+		matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+	}
+]]>
+</script>
+<rect x="0.0" y="0" width="20000.0" height="2134.0" fill="url(#background)"  />
+<text id="title" x="10000.00" y="24" >Flame Graph</text>
+<text id="details" x="10.00" y="2117" > </text>
+<text id="unzoom" x="10.00" y="24" class="hide">Reset Zoom</text>
+<text id="search" x="19890.00" y="24" >Search</text>
+<text id="ignorecase" x="19974.00" y="24" >ic</text>
+<text id="matched" x="19890.00" y="2117" > </text>
+<g id="frames">
+<g >
+<title>spla::Library::set_accelerator (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1973" width="69.7" height="15.0" fill="rgb(208,15,3)" rx="2" ry="2" />
+<text  x="19624.22" y="1983.5" >spla::L..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="437" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="447.5" >[unknown]</text>
+</g>
+<g >
+<title>std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;::find (403,524,642 samples, 2.55%)</title><rect x="17233.2" y="1973" width="509.8" height="15.0" fill="rgb(236,142,34)" rx="2" ry="2" />
+<text  x="17236.25" y="1983.5" >std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocato..</text>
+</g>
+<g >
+<title>float* std::__uninitialized_default_n_1&lt;true&gt;::__uninit_default_n&lt;float*, unsigned long&gt; (15,786,225 samples, 0.10%)</title><rect x="14690.6" y="1701" width="19.9" height="15.0" fill="rgb(239,160,38)" rx="2" ry="2" />
+<text  x="14693.60" y="1711.5" ></text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1861" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1871.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1061" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1071.5" >[unknown]</text>
+</g>
+<g >
+<title>std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;::find (403,524,642 samples, 2.55%)</title><rect x="17233.2" y="1957" width="509.8" height="15.0" fill="rgb(236,142,34)" rx="2" ry="2" />
+<text  x="17236.25" y="1967.5" >std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocato..</text>
+</g>
+<g >
+<title>realloc (83,797,346 samples, 0.53%)</title><rect x="10249.7" y="2037" width="105.9" height="15.0" fill="rgb(246,189,45)" rx="2" ry="2" />
+<text  x="10252.69" y="2047.5" >realloc</text>
+</g>
+<g >
+<title>std::vector&lt;std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;, std::allocator&lt;std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt; &gt; &gt;::operator[] (82,833,696 samples, 0.52%)</title><rect x="11440.9" y="1957" width="104.7" height="15.0" fill="rgb(252,219,52)" rx="2" ry="2" />
+<text  x="11443.93" y="1967.5" >std::vector&lt;..</text>
+</g>
+<g >
+<title>std::pair&lt;int, int&gt;* std::__relocate_a&lt;std::pair&lt;int, int&gt;*, std::pair&lt;int, int&gt;*, std::allocator&lt;std::pair&lt;int, int&gt; &gt; &gt; (159,027,727 samples, 1.01%)</title><rect x="19420.3" y="1909" width="200.9" height="15.0" fill="rgb(217,57,13)" rx="2" ry="2" />
+<text  x="19423.32" y="1919.5" >std::pair&lt;int, int&gt;* std::..</text>
+</g>
+<g >
+<title>__gnu_cxx::__normal_iterator&lt;std::pair&lt;unsigned int, int&gt;*, std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt; &gt; std::__upper_bound&lt;__gnu_cxx::__normal_iterator&lt;std::pair&lt;unsigned int, int&gt;*, std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt; &gt;, std::pair&lt;unsigned int, int&gt;, __gnu_cxx::__ops::_Val_comp_iter&lt;spla::cpu_lil_add_element&lt;int&gt; (83,176,124 samples, 0.53%)</title><rect x="15995.6" y="1925" width="105.1" height="15.0" fill="rgb(210,26,6)" rx="2" ry="2" />
+<text  x="15998.60" y="1935.5" >__gnu_cxx::_..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="757" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="767.5" >[unknown]</text>
+</g>
+<g >
+<title>std::pair&lt;std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;, std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt; &gt;::pair&lt;char const*&amp;, std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;, true&gt; (17,486,241 samples, 0.11%)</title><rect x="14582.8" y="1845" width="22.1" height="15.0" fill="rgb(236,145,34)" rx="2" ry="2" />
+<text  x="14585.79" y="1855.5" >s..</text>
+</g>
+<g >
+<title>spla-pagerank (15,815,742,924 samples, 100.00%)</title><rect x="10.0" y="2069" width="19980.0" height="15.0" fill="rgb(249,204,48)" rx="2" ry="2" />
+<text  x="13.00" y="2079.5" >spla-pagerank</text>
+</g>
+<g >
+<title>[libtbb.so.12.17] (9,999,999 samples, 0.06%)</title><rect x="457.3" y="1973" width="12.7" height="15.0" fill="rgb(237,150,35)" rx="2" ry="2" />
+<text  x="460.32" y="1983.5" ></text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1957" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1967.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::TDecorationStorage&lt;int, spla::FormatVector, 5&gt;::get_fill_value (81,736,696 samples, 0.52%)</title><rect x="10914.6" y="1973" width="103.2" height="15.0" fill="rgb(232,128,30)" rx="2" ry="2" />
+<text  x="10917.56" y="1983.5" >spla::TDecor..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="885" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="895.5" >[unknown]</text>
+</g>
+<g >
+<title>[libc.so.6] (83,797,346 samples, 0.53%)</title><rect x="10249.7" y="2005" width="105.9" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="10252.69" y="2015.5" >[libc.so.6]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1829" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1839.5" >[unknown]</text>
+</g>
+<g >
+<title>void std::__fill_a1&lt;float*, float&gt; (15,786,225 samples, 0.10%)</title><rect x="14690.6" y="1685" width="19.9" height="15.0" fill="rgb(249,204,48)" rx="2" ry="2" />
+<text  x="14693.60" y="1695.5" ></text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1029" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1039.5" >[unknown]</text>
+</g>
+<g >
+<title>std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;::basic_string&lt;std::allocator&lt;char&gt; &gt; (17,486,241 samples, 0.11%)</title><rect x="14582.8" y="1829" width="22.1" height="15.0" fill="rgb(209,22,5)" rx="2" ry="2" />
+<text  x="14585.79" y="1839.5" >s..</text>
+</g>
+<g >
+<title>spla::CLAccelerator::init (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1957" width="69.7" height="15.0" fill="rgb(216,53,12)" rx="2" ry="2" />
+<text  x="19624.22" y="1967.5" >spla::C..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1589" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1599.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1365" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1375.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="533" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="543.5" >[unknown]</text>
+</g>
+<g >
+<title>[libc.so.6] (7,258,437,399 samples, 45.89%)</title><rect x="10820.4" y="2021" width="9169.6" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="10823.43" y="2031.5" >[libc.so.6]</text>
+</g>
+<g >
+<title>std::locale::locale (39,687,433 samples, 0.25%)</title><rect x="19266.2" y="1973" width="50.1" height="15.0" fill="rgb(214,44,10)" rx="2" ry="2" />
+<text  x="19269.15" y="1983.5" >std::..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1749" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1759.5" >[unknown]</text>
+</g>
+<g >
+<title>std::pair&lt;int, int&gt;* std::uninitialized_copy&lt;__gnu_cxx::__normal_iterator&lt;std::pair&lt;int, int&gt; const*, std::vector&lt;std::pair&lt;int, int&gt;, std::allocator&lt;std::pair&lt;int, int&gt; &gt; &gt; &gt;, std::pair&lt;int, int&gt;*&gt; (74,509,449 samples, 0.47%)</title><rect x="10820.4" y="1941" width="94.2" height="15.0" fill="rgb(246,192,46)" rx="2" ry="2" />
+<text  x="10823.43" y="1951.5" >std::pair&lt;i..</text>
+</g>
+<g >
+<title>spla::TMatrix&lt;float&gt;::validate_rwd (251,739,960 samples, 1.59%)</title><rect x="11122.9" y="1957" width="318.0" height="15.0" fill="rgb(226,99,23)" rx="2" ry="2" />
+<text  x="11125.91" y="1967.5" >spla::TMatrix&lt;float&gt;::validate_rwd</text>
+</g>
+<g >
+<title>spla::StorageManager&lt;int, spla::FormatVector, 5&gt;::validate_rw (164,282,572 samples, 1.04%)</title><rect x="14067.2" y="1941" width="207.5" height="15.0" fill="rgb(240,163,39)" rx="2" ry="2" />
+<text  x="14070.21" y="1951.5" >spla::StorageManager&lt;int, s..</text>
+</g>
+<g >
+<title>std::_Base_bitset&lt;1ul&gt;::_S_maskbit (80,875,222 samples, 0.51%)</title><rect x="15475.7" y="1845" width="102.2" height="15.0" fill="rgb(248,199,47)" rx="2" ry="2" />
+<text  x="15478.70" y="1855.5" >std::_Base_b..</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::insert (912,426,711 samples, 5.77%)</title><rect x="12072.4" y="1941" width="1152.7" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text  x="12075.41" y="1951.5" >std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::insert</text>
+</g>
+<g >
+<title>spla::execute_immediate (302,767,285 samples, 1.91%)</title><rect x="14582.8" y="1957" width="382.5" height="15.0" fill="rgb(240,165,39)" rx="2" ry="2" />
+<text  x="14585.79" y="1967.5" >spla::execute_immediate</text>
+</g>
+<g >
+<title>khrIcdOsVendorsEnumerate (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1829" width="69.7" height="15.0" fill="rgb(209,19,4)" rx="2" ry="2" />
+<text  x="19624.22" y="1839.5" >khrIcdO..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="405" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="415.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1893" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1903.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::register_formats_matrix&lt;float&gt; (217,427,564 samples, 1.37%)</title><rect x="14690.6" y="1797" width="274.7" height="15.0" fill="rgb(239,158,37)" rx="2" ry="2" />
+<text  x="14693.60" y="1807.5" >spla::register_formats_matrix&lt;float&gt;</text>
+</g>
+<g >
+<title>spla::StorageManager&lt;float, spla::FormatMatrix, 8&gt;::validate_rw (217,427,564 samples, 1.37%)</title><rect x="14690.6" y="1877" width="274.7" height="15.0" fill="rgb(246,192,46)" rx="2" ry="2" />
+<text  x="14693.60" y="1887.5" >spla::StorageManager&lt;float, spla::Fo..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1093" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1103.5" >[unknown]</text>
+</g>
+<g >
+<title>std::istream::operator&gt;&gt; (82,701,918 samples, 0.52%)</title><rect x="19780.9" y="1989" width="104.5" height="15.0" fill="rgb(226,99,23)" rx="2" ry="2" />
+<text  x="19783.91" y="1999.5" >std::istream..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="485" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="495.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::TDecorationStorage&lt;int, spla::FormatVector, 5&gt;::is_valid (83,091,291 samples, 0.53%)</title><rect x="14067.2" y="1925" width="105.0" height="15.0" fill="rgb(209,19,4)" rx="2" ry="2" />
+<text  x="14070.21" y="1935.5" >spla::TDecor..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="805" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="815.5" >[unknown]</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::end (167,022,040 samples, 1.06%)</title><rect x="11861.4" y="1941" width="211.0" height="15.0" fill="rgb(208,16,3)" rx="2" ry="2" />
+<text  x="11864.41" y="1951.5" >std::vector&lt;std::pair&lt;unsig..</text>
+</g>
+<g >
+<title>std::vector&lt;std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;, std::allocator&lt;std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt; &gt; &gt;::_M_default_append (9,991,927 samples, 0.06%)</title><rect x="15577.9" y="1797" width="12.6" height="15.0" fill="rgb(237,150,36)" rx="2" ry="2" />
+<text  x="15580.87" y="1807.5" ></text>
+</g>
+<g >
+<title>spla::ref_ptr&lt;spla::Matrix&gt;::~ref_ptr (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1957" width="104.6" height="15.0" fill="rgb(227,102,24)" rx="2" ry="2" />
+<text  x="19888.38" y="1967.5" >spla::ref_pt..</text>
+</g>
+<g >
+<title>std::istreambuf_iterator&lt;char, std::char_traits&lt;char&gt; &gt; std::num_get&lt;char, std::istreambuf_iterator&lt;char, std::char_traits&lt;char&gt; &gt; &gt;::_M_extract_int&lt;long&gt; (732,039,701 samples, 4.63%)</title><rect x="18341.4" y="1957" width="924.8" height="15.0" fill="rgb(241,167,39)" rx="2" ry="2" />
+<text  x="18344.37" y="1967.5" >std::istreambuf_iterator&lt;char, std::char_traits&lt;char&gt; &gt; std::num_get&lt;char, std::istreambuf_iterator&lt;char, std::char_traits&lt;char&gt;..</text>
+</g>
+<g >
+<title>all (15,815,742,924 samples, 100%)</title><rect x="10.0" y="2085" width="19980.0" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="13.00" y="2095.5" ></text>
+</g>
+<g >
+<title>spla::TDecorationStorage&lt;float, spla::FormatMatrix, 8&gt;::get_ptr_i (83,191,059 samples, 0.53%)</title><rect x="11017.8" y="1925" width="105.1" height="15.0" fill="rgb(229,110,26)" rx="2" ry="2" />
+<text  x="11020.81" y="1935.5" >spla::TDecor..</text>
+</g>
+<g >
+<title>spla::register_formats_vector&lt;int&gt; (81,191,281 samples, 0.51%)</title><rect x="14172.2" y="1861" width="102.5" height="15.0" fill="rgb(213,40,9)" rx="2" ry="2" />
+<text  x="14175.18" y="1871.5" >spla::regist..</text>
+</g>
+<g >
+<title>[libtbb.so.12.17] (364,091,834 samples, 2.30%)</title><rect x="10.0" y="2005" width="460.0" height="15.0" fill="rgb(237,150,35)" rx="2" ry="2" />
+<text  x="13.00" y="2015.5" >[libtbb.so.12.17]</text>
+</g>
+<g >
+<title>std::_Function_handler&lt;void  (81,191,281 samples, 0.51%)</title><rect x="14172.2" y="1909" width="102.5" height="15.0" fill="rgb(245,187,44)" rx="2" ry="2" />
+<text  x="14175.18" y="1919.5" >std::_Functi..</text>
+</g>
+<g >
+<title>[libc.so.6] (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1525" width="23.4" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="19670.49" y="1535.5" >[..</text>
+</g>
+<g >
+<title>std::_Vector_base&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;::~_Vector_base (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1701" width="104.6" height="15.0" fill="rgb(217,59,14)" rx="2" ry="2" />
+<text  x="19888.38" y="1711.5" >std::_Vector..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="709" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="719.5" >[unknown]</text>
+</g>
+<g >
+<title>std::pair&lt;unsigned int, float&gt;* std::__relocate_a_1&lt;std::pair&lt;unsigned int, float&gt;*, std::pair&lt;unsigned int, float&gt;*, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt; (167,204,442 samples, 1.06%)</title><rect x="13013.8" y="1861" width="211.3" height="15.0" fill="rgb(217,55,13)" rx="2" ry="2" />
+<text  x="13016.85" y="1871.5" >std::pair&lt;unsigned int, flo..</text>
+</g>
+<g >
+<title>[ld-linux-x86-64.so.2] (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1429" width="23.4" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="19670.49" y="1439.5" >[..</text>
+</g>
+<g >
+<title>[ld-linux-x86-64.so.2] (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1349" width="23.4" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="19670.49" y="1359.5" >[..</text>
+</g>
+<g >
+<title>[libc.so.6] (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1765" width="69.7" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="19624.22" y="1775.5" >[libc.s..</text>
+</g>
+<g >
+<title>_dl_catch_exception (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1685" width="69.7" height="15.0" fill="rgb(253,223,53)" rx="2" ry="2" />
+<text  x="19624.22" y="1695.5" >_dl_cat..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="117" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="127.5" >[unknown]</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::size (83,636,531 samples, 0.53%)</title><rect x="12803.5" y="1877" width="105.6" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
+<text  x="12806.47" y="1887.5" >std::vector&lt;..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="741" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="751.5" >[unknown]</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::_M_check_len (166,819,604 samples, 1.05%)</title><rect x="12698.4" y="1893" width="210.7" height="15.0" fill="rgb(223,86,20)" rx="2" ry="2" />
+<text  x="12701.39" y="1903.5" >std::vector&lt;std::pair&lt;unsig..</text>
+</g>
+<g >
+<title>spla::exec_mxv_masked (302,767,285 samples, 1.91%)</title><rect x="14582.8" y="1973" width="382.5" height="15.0" fill="rgb(221,76,18)" rx="2" ry="2" />
+<text  x="14585.79" y="1983.5" >spla::exec_mxv_masked</text>
+</g>
+<g >
+<title>std::vector&lt;int, std::allocator&lt;int&gt; &gt;::operator[] (83,716,533 samples, 0.53%)</title><rect x="14477.0" y="1909" width="105.8" height="15.0" fill="rgb(226,97,23)" rx="2" ry="2" />
+<text  x="14480.04" y="1919.5" >std::vector&lt;..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1877" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1887.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1077" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1087.5" >[unknown]</text>
+</g>
+<g >
+<title>_dl_catch_exception (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1653" width="69.7" height="15.0" fill="rgb(253,223,53)" rx="2" ry="2" />
+<text  x="19624.22" y="1663.5" >_dl_cat..</text>
+</g>
+<g >
+<title>spla::StorageManager&lt;float, spla::FormatMatrix, 8&gt;::validate_rwd (168,277,882 samples, 1.06%)</title><rect x="11122.9" y="1941" width="212.6" height="15.0" fill="rgb(250,211,50)" rx="2" ry="2" />
+<text  x="11125.91" y="1951.5" >spla::StorageManager&lt;float, ..</text>
+</g>
+<g >
+<title>spla::TDecorationStorage&lt;int, spla::FormatMatrix, 8&gt;::is_valid_i (162,783,596 samples, 1.03%)</title><rect x="15372.2" y="1893" width="205.7" height="15.0" fill="rgb(234,137,32)" rx="2" ry="2" />
+<text  x="15375.22" y="1903.5" >spla::TDecorationStorage&lt;in..</text>
+</g>
+<g >
+<title>spla::RefCnt::rel_ref (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1925" width="104.6" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="19888.38" y="1935.5" >spla::RefCnt..</text>
+</g>
+<g >
+<title>std::tuple_element&lt;0ul, std::tuple&lt;spla::StorageManager&lt;float, spla::FormatMatrix, 8&gt;*, std::default_delete&lt;spla::StorageManager&lt;float, spla::FormatMatrix, 8&gt; &gt; &gt; &gt;::type const&amp; std::get&lt;0ul, spla::StorageManager&lt;float, spla::FormatMatrix, 8&gt;*, std::default_delete&lt;spla::StorageManager&lt;float, spla::FormatMatrix, 8&gt; &gt; &gt; (83,462,078 samples, 0.53%)</title><rect x="11335.5" y="1877" width="105.4" height="15.0" fill="rgb(247,194,46)" rx="2" ry="2" />
+<text  x="11338.49" y="1887.5" >std::tuple_e..</text>
+</g>
+<g >
+<title>[libc.so.6] (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1397" width="23.4" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="19670.49" y="1407.5" >[..</text>
+</g>
+<g >
+<title>std::bitset&lt;5ul&gt;::test (83,091,291 samples, 0.53%)</title><rect x="14067.2" y="1909" width="105.0" height="15.0" fill="rgb(243,175,42)" rx="2" ry="2" />
+<text  x="14070.21" y="1919.5" >std::bitset&lt;..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1269" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1279.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1989" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1999.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::StorageManager&lt;float, spla::FormatMatrix, 8&gt;* const&amp; std::__get_helper&lt;0ul, spla::StorageManager&lt;float, spla::FormatMatrix, 8&gt;*, std::default_delete&lt;spla::StorageManager&lt;float, spla::FormatMatrix, 8&gt; &gt; &gt; (83,462,078 samples, 0.53%)</title><rect x="11335.5" y="1861" width="105.4" height="15.0" fill="rgb(221,74,17)" rx="2" ry="2" />
+<text  x="11338.49" y="1871.5" >spla::Storag..</text>
+</g>
+<g >
+<title>spla::CpuLil&lt;float&gt;::~CpuLil (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1813" width="186.6" height="15.0" fill="rgb(214,43,10)" rx="2" ry="2" />
+<text  x="14968.28" y="1823.5" >spla::CpuLil&lt;float&gt;::~Cp..</text>
+</g>
+<g >
+<title>spla::Algo_m_reduce_by_row_cpu&lt;int&gt;::execute (243,841,364 samples, 1.54%)</title><rect x="14274.7" y="1925" width="308.1" height="15.0" fill="rgb(209,21,5)" rx="2" ry="2" />
+<text  x="14277.75" y="1935.5" >spla::Algo_m_reduce_by_row_cpu&lt;int&gt;::exec..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="773" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="783.5" >[unknown]</text>
+</g>
+<g >
+<title>void std::__invoke_impl&lt;void, spla::register_formats_matrix&lt;int&gt; (9,991,927 samples, 0.06%)</title><rect x="15577.9" y="1861" width="12.6" height="15.0" fill="rgb(214,42,10)" rx="2" ry="2" />
+<text  x="15580.87" y="1871.5" ></text>
+</g>
+<g >
+<title>[ld-linux-x86-64.so.2] (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1637" width="69.7" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="19624.22" y="1647.5" >[ld-lin..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1125" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1135.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="165" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="175.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1333" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1343.5" >[unknown]</text>
+</g>
+<g >
+<title>std::istream::operator&gt;&gt; (964,714,348 samples, 6.10%)</title><rect x="18047.4" y="1973" width="1218.8" height="15.0" fill="rgb(226,99,23)" rx="2" ry="2" />
+<text  x="18050.43" y="1983.5" >std::istream::operator&gt;&gt;</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="565" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="575.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1925" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1935.5" >[unknown]</text>
+</g>
+<g >
+<title>[ld-linux-x86-64.so.2] (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1317" width="23.4" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="19670.49" y="1327.5" >[..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="85" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="95.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::CpuLil&lt;int&gt;::~CpuLil (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1797" width="104.6" height="15.0" fill="rgb(225,95,22)" rx="2" ry="2" />
+<text  x="19888.38" y="1807.5" >spla::CpuLil..</text>
+</g>
+<g >
+<title>std::__cxx11::basic_istringstream&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;::~basic_istringstream (71,260,343 samples, 0.45%)</title><rect x="19690.9" y="1989" width="90.0" height="15.0" fill="rgb(218,62,14)" rx="2" ry="2" />
+<text  x="19693.88" y="1999.5" >std::__cxx..</text>
+</g>
+<g >
+<title>std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;::_M_construct&lt;char const*&gt; (17,486,241 samples, 0.11%)</title><rect x="14582.8" y="1813" width="22.1" height="15.0" fill="rgb(214,43,10)" rx="2" ry="2" />
+<text  x="14585.79" y="1823.5" >s..</text>
+</g>
+<g >
+<title>spla::Algo_mxv_masked_cl&lt;float&gt;::ensure_kernel (85,339,721 samples, 0.54%)</title><rect x="14582.8" y="1893" width="107.8" height="15.0" fill="rgb(248,199,47)" rx="2" ry="2" />
+<text  x="14585.79" y="1903.5" >spla::Algo_mx..</text>
+</g>
+<g >
+<title>spla::StorageManager&lt;int, spla::FormatMatrix, 8&gt;::validate_rwd (329,717,846 samples, 2.08%)</title><rect x="15372.2" y="1941" width="416.6" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
+<text  x="15375.22" y="1951.5" >spla::StorageManager&lt;int, spla::FormatMatrix, 8&gt;::valida..</text>
+</g>
+<g >
+<title>std::basic_istream&lt;char, std::char_traits&lt;char&gt; &gt;&amp; std::getline&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt; (81,228,169 samples, 0.51%)</title><rect x="17743.0" y="1973" width="102.6" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
+<text  x="17746.02" y="1983.5" >std::basic_i..</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::_S_relocate (250,095,811 samples, 1.58%)</title><rect x="12909.1" y="1893" width="316.0" height="15.0" fill="rgb(232,126,30)" rx="2" ry="2" />
+<text  x="12912.13" y="1903.5" >std::vector&lt;std::pair&lt;unsigned int, float&gt;..</text>
+</g>
+<g >
+<title>std::__new_allocator&lt;std::pair&lt;unsigned int, float&gt; &gt;::deallocate (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1685" width="186.6" height="15.0" fill="rgb(207,12,3)" rx="2" ry="2" />
+<text  x="14968.28" y="1695.5" >std::__new_allocator&lt;std..</text>
+</g>
+<g >
+<title>void std::__relocate_object_a&lt;std::pair&lt;int, int&gt;, std::pair&lt;int, int&gt;, std::allocator&lt;std::pair&lt;int, int&gt; &gt; &gt; (159,027,727 samples, 1.01%)</title><rect x="19420.3" y="1877" width="200.9" height="15.0" fill="rgb(245,187,44)" rx="2" ry="2" />
+<text  x="19423.32" y="1887.5" >void std::__relocate_objec..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="309" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="319.5" >[unknown]</text>
+</g>
+<g >
+<title>std::enable_if&lt;is_invocable_r_v&lt;void, spla::register_formats_vector&lt;int&gt; (81,191,281 samples, 0.51%)</title><rect x="14172.2" y="1893" width="102.5" height="15.0" fill="rgb(254,226,54)" rx="2" ry="2" />
+<text  x="14175.18" y="1903.5" >std::enable_..</text>
+</g>
+<g >
+<title>std::pair&lt;SPLAGraph, std::vector&lt;std::pair&lt;int, int&gt;, std::allocator&lt;std::pair&lt;int, int&gt; &gt; &gt; &gt;::~pair (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1989" width="104.6" height="15.0" fill="rgb(229,114,27)" rx="2" ry="2" />
+<text  x="19888.38" y="1999.5" >std::pair&lt;SP..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="853" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="863.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::TDecorationStorage&lt;float, spla::FormatMatrix, 8&gt;::validate (84,186,553 samples, 0.53%)</title><rect x="11122.9" y="1925" width="106.4" height="15.0" fill="rgb(221,77,18)" rx="2" ry="2" />
+<text  x="11125.91" y="1935.5" >spla::TDecora..</text>
+</g>
+<g >
+<title>void std::_Destroy&lt;std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt; &gt; (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1749" width="186.6" height="15.0" fill="rgb(241,167,40)" rx="2" ry="2" />
+<text  x="14968.28" y="1759.5" >void std::_Destroy&lt;std::..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="453" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="463.5" >[unknown]</text>
+</g>
+<g >
+<title>void std::_Destroy&lt;std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt; &gt; (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1733" width="104.6" height="15.0" fill="rgb(214,42,10)" rx="2" ry="2" />
+<text  x="19888.38" y="1743.5" >void std::_D..</text>
+</g>
+<g >
+<title>std::bitset&lt;8ul&gt;::test (162,783,596 samples, 1.03%)</title><rect x="15372.2" y="1877" width="205.7" height="15.0" fill="rgb(223,86,20)" rx="2" ry="2" />
+<text  x="15375.22" y="1887.5" >std::bitset&lt;8ul&gt;::test</text>
+</g>
+<g >
+<title>float* std::__uninitialized_default_n_a&lt;float*, unsigned long, float&gt; (15,786,225 samples, 0.10%)</title><rect x="14690.6" y="1733" width="19.9" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
+<text  x="14693.60" y="1743.5" ></text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="965" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="975.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::TVector&lt;int&gt;::validate_rw (164,282,572 samples, 1.04%)</title><rect x="14067.2" y="1957" width="207.5" height="15.0" fill="rgb(246,192,45)" rx="2" ry="2" />
+<text  x="14070.21" y="1967.5" >spla::TVector&lt;int&gt;::validat..</text>
+</g>
+<g >
+<title>void spla::cpu_lil_resize&lt;int&gt; (9,991,927 samples, 0.06%)</title><rect x="15577.9" y="1829" width="12.6" height="15.0" fill="rgb(216,52,12)" rx="2" ry="2" />
+<text  x="15580.87" y="1839.5" ></text>
+</g>
+<g >
+<title>[libc.so.6] (83,797,346 samples, 0.53%)</title><rect x="10249.7" y="1973" width="105.9" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="10252.69" y="1983.5" >[libc.so.6]</text>
+</g>
+<g >
+<title>spla::ref_ptr&lt;spla::Op&gt;::operator (67,853,480 samples, 0.43%)</title><rect x="14604.9" y="1877" width="85.7" height="15.0" fill="rgb(232,126,30)" rx="2" ry="2" />
+<text  x="14607.88" y="1887.5" >spla::ref_..</text>
+</g>
+<g >
+<title>std::function&lt;void  (9,991,927 samples, 0.06%)</title><rect x="15577.9" y="1909" width="12.6" height="15.0" fill="rgb(207,13,3)" rx="2" ry="2" />
+<text  x="15580.87" y="1919.5" ></text>
+</g>
+<g >
+<title>[libtbb.so.12.17] (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1605" width="23.4" height="15.0" fill="rgb(237,150,35)" rx="2" ry="2" />
+<text  x="19670.49" y="1615.5" >[..</text>
+</g>
+<g >
+<title>void spla::cpu_lil_add_element&lt;float&gt; (1,329,456,509 samples, 8.41%)</title><rect x="11545.6" y="1957" width="1679.5" height="15.0" fill="rgb(254,226,54)" rx="2" ry="2" />
+<text  x="11548.58" y="1967.5" >void spla::cpu_lil_add_element&lt;float&gt;</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="581" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="591.5" >[unknown]</text>
+</g>
+<g >
+<title>void spla::cpu_csr_resize&lt;float&gt; (15,786,225 samples, 0.10%)</title><rect x="14690.6" y="1781" width="19.9" height="15.0" fill="rgb(209,22,5)" rx="2" ry="2" />
+<text  x="14693.60" y="1791.5" ></text>
+</g>
+<g >
+<title>std::unique_ptr&lt;spla::StorageManager&lt;float, spla::FormatMatrix, 8&gt;, std::default_delete&lt;spla::StorageManager&lt;float, spla::FormatMatrix, 8&gt; &gt; &gt;::get (83,462,078 samples, 0.53%)</title><rect x="11335.5" y="1909" width="105.4" height="15.0" fill="rgb(216,50,12)" rx="2" ry="2" />
+<text  x="11338.49" y="1919.5" >std::unique_..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1461" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1471.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::TDecorationStorage&lt;int, spla::FormatMatrix, 8&gt;::get_ptr_i (9,999,999 samples, 0.06%)</title><rect x="15256.6" y="1909" width="12.6" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="15259.59" y="1919.5" ></text>
+</g>
+<g >
+<title>[ld-linux-x86-64.so.2] (36,626,149 samples, 0.23%)</title><rect x="19621.2" y="1589" width="46.3" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="19624.22" y="1599.5" >[ld-..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1637" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1647.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="549" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="559.5" >[unknown]</text>
+</g>
+<g >
+<title>std::_Function_handler&lt;void  (217,427,564 samples, 1.37%)</title><rect x="14690.6" y="1845" width="274.7" height="15.0" fill="rgb(245,187,44)" rx="2" ry="2" />
+<text  x="14693.60" y="1855.5" >std::_Function_handler&lt;void </text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1013" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1023.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1445" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1455.5" >[unknown]</text>
+</g>
+<g >
+<title>[ld-linux-x86-64.so.2] (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1285" width="23.4" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="19670.49" y="1295.5" >[..</text>
+</g>
+<g >
+<title>std::__uniq_ptr_impl&lt;spla::StorageManager&lt;float, spla::FormatMatrix, 8&gt;, std::default_delete&lt;spla::StorageManager&lt;float, spla::FormatMatrix, 8&gt; &gt; &gt;::_M_ptr (83,462,078 samples, 0.53%)</title><rect x="11335.5" y="1893" width="105.4" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="11338.49" y="1903.5" >std::__uniq_..</text>
+</g>
+<g >
+<title>[libc.so.6] (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1669" width="186.6" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="14968.28" y="1679.5" >[libc.so.6]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1813" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1823.5" >[unknown]</text>
+</g>
+<g >
+<title>[libintelocl.so.2024.18.12.0] (118,086,961 samples, 0.75%)</title><rect x="10459.2" y="2037" width="149.2" height="15.0" fill="rgb(207,12,3)" rx="2" ry="2" />
+<text  x="10462.21" y="2047.5" >[libintelocl.so.202..</text>
+</g>
+<g >
+<title>std::_Function_handler&lt;void  (9,991,927 samples, 0.06%)</title><rect x="15577.9" y="1893" width="12.6" height="15.0" fill="rgb(245,187,44)" rx="2" ry="2" />
+<text  x="15580.87" y="1903.5" ></text>
+</g>
+<g >
+<title>_dl_catch_exception (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1413" width="23.4" height="15.0" fill="rgb(253,223,53)" rx="2" ry="2" />
+<text  x="19670.49" y="1423.5" >_..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="357" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="367.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1397" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1407.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1477" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1487.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="373" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="383.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="2021" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="2031.5" >[unknown]</text>
+</g>
+<g >
+<title>std::pair&lt;unsigned long, robin_hood::detail::Table&lt;true, 80ul, unsigned int, int, robin_hood::hash&lt;unsigned int, void&gt;, std::equal_to&lt;unsigned int&gt; &gt;::InsertionState&gt; robin_hood::detail::Table&lt;true, 80ul, unsigned int, int, robin_hood::hash&lt;unsigned int, void&gt;, std::equal_to&lt;unsigned int&gt; &gt;::insertKeyPrepareEmptySpot&lt;unsigned int const&amp;&gt; (81,191,281 samples, 0.51%)</title><rect x="14172.2" y="1813" width="102.5" height="15.0" fill="rgb(214,43,10)" rx="2" ry="2" />
+<text  x="14175.18" y="1823.5" >std::pair&lt;un..</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;* std::__uninitialized_default_n_a&lt;std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;*, unsigned long, std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt; &gt; (9,991,927 samples, 0.06%)</title><rect x="15577.9" y="1781" width="12.6" height="15.0" fill="rgb(226,97,23)" rx="2" ry="2" />
+<text  x="15580.87" y="1791.5" ></text>
+</g>
+<g >
+<title>spla::CpuLil&lt;int&gt;::~CpuLil (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1781" width="104.6" height="15.0" fill="rgb(225,95,22)" rx="2" ry="2" />
+<text  x="19888.38" y="1791.5" >spla::CpuLil..</text>
+</g>
+<g >
+<title>std::pair&lt;unsigned int, int&gt;* std::__relocate_a&lt;std::pair&lt;unsigned int, int&gt;*, std::pair&lt;unsigned int, int&gt;*, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt; (246,603,828 samples, 1.56%)</title><rect x="16771.4" y="1877" width="311.5" height="15.0" fill="rgb(242,173,41)" rx="2" ry="2" />
+<text  x="16774.37" y="1887.5" >std::pair&lt;unsigned int, int&gt;* std::__reloc..</text>
+</g>
+<g >
+<title>operator new (83,640,248 samples, 0.53%)</title><rect x="12382.7" y="1893" width="105.6" height="15.0" fill="rgb(216,51,12)" rx="2" ry="2" />
+<text  x="12385.67" y="1903.5" >operator new</text>
+</g>
+<g >
+<title>spla::TMatrix&lt;float&gt;::validate_rw (217,427,564 samples, 1.37%)</title><rect x="14690.6" y="1893" width="274.7" height="15.0" fill="rgb(222,80,19)" rx="2" ry="2" />
+<text  x="14693.60" y="1903.5" >spla::TMatrix&lt;float&gt;::validate_rw</text>
+</g>
+<g >
+<title>std::enable_if&lt;is_invocable_r_v&lt;void, spla::register_formats_matrix&lt;float&gt; (217,427,564 samples, 1.37%)</title><rect x="14690.6" y="1829" width="274.7" height="15.0" fill="rgb(230,115,27)" rx="2" ry="2" />
+<text  x="14693.60" y="1839.5" >std::enable_if&lt;is_invocable_r_v&lt;void..</text>
+</g>
+<g >
+<title>PageRankRunner::PageRankRunner (74,509,449 samples, 0.47%)</title><rect x="10820.4" y="1989" width="94.2" height="15.0" fill="rgb(234,135,32)" rx="2" ry="2" />
+<text  x="10823.43" y="1999.5" >PageRankRun..</text>
+</g>
+<g >
+<title>__sched_yield (75,689,085 samples, 0.48%)</title><rect x="470.0" y="2005" width="95.6" height="15.0" fill="rgb(213,40,9)" rx="2" ry="2" />
+<text  x="472.96" y="2015.5" >__sched_yield</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="613" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="623.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="917" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="927.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="229" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="239.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1621" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1631.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::CpuLil&lt;float&gt;* spla::TDecorationStorage&lt;float, spla::FormatMatrix, 8&gt;::get&lt;spla::CpuLil&lt;float&gt; &gt; (83,191,059 samples, 0.53%)</title><rect x="11017.8" y="1941" width="105.1" height="15.0" fill="rgb(207,12,2)" rx="2" ry="2" />
+<text  x="11020.81" y="1951.5" >spla::CpuLil..</text>
+</g>
+<g >
+<title>spla::TMatrix&lt;float&gt;::get_storage_manager (83,462,078 samples, 0.53%)</title><rect x="11335.5" y="1941" width="105.4" height="15.0" fill="rgb(223,86,20)" rx="2" ry="2" />
+<text  x="11338.49" y="1951.5" >spla::TMatri..</text>
+</g>
+<g >
+<title>std::vector&lt;float, std::allocator&lt;float&gt; &gt;::_M_default_append (15,786,225 samples, 0.10%)</title><rect x="14690.6" y="1749" width="19.9" height="15.0" fill="rgb(243,175,41)" rx="2" ry="2" />
+<text  x="14693.60" y="1759.5" ></text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1973" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1983.5" >[unknown]</text>
+</g>
+<g >
+<title>std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;::max_size (161,081,839 samples, 1.02%)</title><rect x="17438.0" y="1925" width="203.5" height="15.0" fill="rgb(248,199,47)" rx="2" ry="2" />
+<text  x="17441.00" y="1935.5" >std::__cxx11::basic_string..</text>
+</g>
+<g >
+<title>spla::execute_immediate (243,841,364 samples, 1.54%)</title><rect x="14274.7" y="1957" width="308.1" height="15.0" fill="rgb(240,165,39)" rx="2" ry="2" />
+<text  x="14277.75" y="1967.5" >spla::execute_immediate</text>
+</g>
+<g >
+<title>void spla::unref&lt;spla::TDecoration&lt;float&gt; &gt; (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1845" width="186.6" height="15.0" fill="rgb(217,56,13)" rx="2" ry="2" />
+<text  x="14968.28" y="1855.5" >void spla::unref&lt;spla::T..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="725" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="735.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::RefCnt::rel_ref (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1813" width="104.6" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="19888.38" y="1823.5" >spla::RefCnt..</text>
+</g>
+<g >
+<title>std::ios_base::ios_base (159,736,555 samples, 1.01%)</title><rect x="17845.6" y="1973" width="201.8" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="17848.63" y="1983.5" >std::ios_base::ios_base</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1141" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1151.5" >[unknown]</text>
+</g>
+<g >
+<title>_dl_catch_exception (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1333" width="23.4" height="15.0" fill="rgb(253,223,53)" rx="2" ry="2" />
+<text  x="19670.49" y="1343.5" >_..</text>
+</g>
+<g >
+<title>spla::Algo_mxv_masked_cl&lt;float&gt;::execute_vector (302,767,285 samples, 1.91%)</title><rect x="14582.8" y="1909" width="382.5" height="15.0" fill="rgb(205,2,0)" rx="2" ry="2" />
+<text  x="14585.79" y="1919.5" >spla::Algo_mxv_masked_cl&lt;float&gt;::execute_vector</text>
+</g>
+<g >
+<title>void spla::cpu_lil_add_element&lt;int&gt; (959,591,838 samples, 6.07%)</title><rect x="15892.6" y="1957" width="1212.2" height="15.0" fill="rgb(215,49,11)" rx="2" ry="2" />
+<text  x="15895.55" y="1967.5" >void spla::cpu_lil_add_element&lt;int&gt;</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="261" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="271.5" >[unknown]</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;::max_size (206,574,398 samples, 1.31%)</title><rect x="16510.4" y="1877" width="261.0" height="15.0" fill="rgb(208,18,4)" rx="2" ry="2" />
+<text  x="16513.41" y="1887.5" >std::vector&lt;std::pair&lt;unsigned int..</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::_M_insert_rval (912,426,711 samples, 5.77%)</title><rect x="12072.4" y="1925" width="1152.7" height="15.0" fill="rgb(236,143,34)" rx="2" ry="2" />
+<text  x="12075.41" y="1935.5" >std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::_M_insert_rval</text>
+</g>
+<g >
+<title>[ld-linux-x86-64.so.2] (36,626,149 samples, 0.23%)</title><rect x="19621.2" y="1605" width="46.3" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="19624.22" y="1615.5" >[ld-..</text>
+</g>
+<g >
+<title>void spla::unref&lt;spla::TDecoration&lt;int&gt; &gt; (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1829" width="104.6" height="15.0" fill="rgb(228,108,26)" rx="2" ry="2" />
+<text  x="19888.38" y="1839.5" >void spla::u..</text>
+</g>
+<g >
+<title>spla::TDecorationStorage&lt;int, spla::FormatMatrix, 8&gt;::get_ptr (91,536,994 samples, 0.58%)</title><rect x="15256.6" y="1925" width="115.6" height="15.0" fill="rgb(232,125,30)" rx="2" ry="2" />
+<text  x="15259.59" y="1935.5" >spla::TDecorat..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1413" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1423.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::ref_ptr&lt;spla::TDecoration&lt;float&gt; &gt;::~ref_ptr (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1861" width="186.6" height="15.0" fill="rgb(236,147,35)" rx="2" ry="2" />
+<text  x="14968.28" y="1871.5" >spla::ref_ptr&lt;spla::TDec..</text>
+</g>
+<g >
+<title>[libcommon_clang.so.2024.18.12.0] (82,055,129 samples, 0.52%)</title><rect x="10355.6" y="2037" width="103.6" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="10358.55" y="2047.5" >[libcommon_c..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="693" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="703.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::CLProgramBuilder::add_define (17,486,241 samples, 0.11%)</title><rect x="14582.8" y="1877" width="22.1" height="15.0" fill="rgb(223,86,20)" rx="2" ry="2" />
+<text  x="14585.79" y="1887.5" >s..</text>
+</g>
+<g >
+<title>_dl_catch_exception (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1733" width="69.7" height="15.0" fill="rgb(253,223,53)" rx="2" ry="2" />
+<text  x="19624.22" y="1743.5" >_dl_cat..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="597" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="607.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="933" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="943.5" >[unknown]</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;int, int&gt;, std::allocator&lt;std::pair&lt;int, int&gt; &gt; &gt;::vector (74,509,449 samples, 0.47%)</title><rect x="10820.4" y="1973" width="94.2" height="15.0" fill="rgb(220,71,17)" rx="2" ry="2" />
+<text  x="10823.43" y="1983.5" >std::vector..</text>
+</g>
+<g >
+<title>[libcommon_clang.so.2024.18.12.0] (148,268,082 samples, 0.94%)</title><rect x="565.6" y="2053" width="187.3" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="568.57" y="2063.5" >[libcommon_clang.so.2024..</text>
+</g>
+<g >
+<title>operator new (74,509,449 samples, 0.47%)</title><rect x="10820.4" y="1909" width="94.2" height="15.0" fill="rgb(216,51,12)" rx="2" ry="2" />
+<text  x="10823.43" y="1919.5" >operator new</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1941" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1951.5" >[unknown]</text>
+</g>
+<g >
+<title>std::pair&lt;unsigned int, int&gt;* std::__relocate_a_1&lt;std::pair&lt;unsigned int, int&gt;*, std::pair&lt;unsigned int, int&gt;*, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt; (246,603,828 samples, 1.56%)</title><rect x="16771.4" y="1861" width="311.5" height="15.0" fill="rgb(212,34,8)" rx="2" ry="2" />
+<text  x="16774.37" y="1871.5" >std::pair&lt;unsigned int, int&gt;* std::__reloc..</text>
+</g>
+<g >
+<title>spla::TDecorationStorage&lt;float, spla::FormatMatrix, 8&gt;::~TDecorationStorage (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1893" width="186.6" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="14968.28" y="1903.5" >spla::TDecorationStorage..</text>
+</g>
+<g >
+<title>spla::register_formats_matrix&lt;int&gt; (9,991,927 samples, 0.06%)</title><rect x="15577.9" y="1845" width="12.6" height="15.0" fill="rgb(250,210,50)" rx="2" ry="2" />
+<text  x="15580.87" y="1855.5" ></text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="181" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="191.5" >[unknown]</text>
+</g>
+<g >
+<title>cl::Platform::get (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1925" width="69.7" height="15.0" fill="rgb(253,223,53)" rx="2" ry="2" />
+<text  x="19624.22" y="1935.5" >cl::Pla..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="133" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="143.5" >[unknown]</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::size (94,517,507 samples, 0.60%)</title><rect x="14845.9" y="1749" width="119.4" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
+<text  x="14848.88" y="1759.5" >std::vector&lt;st..</text>
+</g>
+<g >
+<title>std::bitset&lt;8ul&gt;::reset (76,540,631 samples, 0.48%)</title><rect x="15590.5" y="1909" width="96.7" height="15.0" fill="rgb(234,135,32)" rx="2" ry="2" />
+<text  x="15593.49" y="1919.5" >std::bitset..</text>
+</g>
+<g >
+<title>spla::CLAccelerator::set_platform (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1941" width="69.7" height="15.0" fill="rgb(211,27,6)" rx="2" ry="2" />
+<text  x="19624.22" y="1951.5" >spla::C..</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;* std::__uninitialized_default_n_1&lt;false&gt;::__uninit_default_n&lt;std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;*, unsigned long&gt; (9,991,927 samples, 0.06%)</title><rect x="15577.9" y="1749" width="12.6" height="15.0" fill="rgb(206,8,1)" rx="2" ry="2" />
+<text  x="15580.87" y="1759.5" ></text>
+</g>
+<g >
+<title>[libc.so.6] (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1445" width="23.4" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="19670.49" y="1455.5" >[..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="901" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="911.5" >[unknown]</text>
+</g>
+<g >
+<title>std::function&lt;void  (217,427,564 samples, 1.37%)</title><rect x="14690.6" y="1861" width="274.7" height="15.0" fill="rgb(207,13,3)" rx="2" ry="2" />
+<text  x="14693.60" y="1871.5" >std::function&lt;void </text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1157" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1167.5" >[unknown]</text>
+</g>
+<g >
+<title>std::vector&lt;float, std::allocator&lt;float&gt; &gt;::operator[] (64,363,943 samples, 0.41%)</title><rect x="14764.6" y="1765" width="81.3" height="15.0" fill="rgb(253,223,53)" rx="2" ry="2" />
+<text  x="14767.56" y="1775.5" >std::vect..</text>
+</g>
+<g >
+<title>spla::TMatrix&lt;int&gt;::validate_rwd (329,717,846 samples, 2.08%)</title><rect x="15372.2" y="1957" width="416.6" height="15.0" fill="rgb(237,151,36)" rx="2" ry="2" />
+<text  x="15375.22" y="1967.5" >spla::TMatrix&lt;int&gt;::validate_rwd</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1349" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1359.5" >[unknown]</text>
+</g>
+<g >
+<title>void std::_Destroy&lt;std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;*&gt; (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1765" width="186.6" height="15.0" fill="rgb(226,100,24)" rx="2" ry="2" />
+<text  x="14968.28" y="1775.5" >void std::_Destroy&lt;std::..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1845" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1855.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="645" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="655.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1045" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1055.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="53" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="63.5" >[unknown]</text>
+</g>
+<g >
+<title>[libintelocl.so.2024.18.12.0] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="37" width="212.0" height="15.0" fill="rgb(207,12,3)" rx="2" ry="2" />
+<text  x="10611.39" y="47.5" >[libintelocl.so.2024.18.12.0]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="869" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="879.5" >[unknown]</text>
+</g>
+<g >
+<title>[libintelocl.so.2024.18.12.0] (7,601,268,881 samples, 48.06%)</title><rect x="752.9" y="2053" width="9602.7" height="15.0" fill="rgb(207,12,3)" rx="2" ry="2" />
+<text  x="755.88" y="2063.5" >[libintelocl.so.2024.18.12.0]</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;::_M_check_len (206,574,398 samples, 1.31%)</title><rect x="16510.4" y="1893" width="261.0" height="15.0" fill="rgb(246,191,45)" rx="2" ry="2" />
+<text  x="16513.41" y="1903.5" >std::vector&lt;std::pair&lt;unsigned int..</text>
+</g>
+<g >
+<title>clGetPlatformIDs (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1909" width="69.7" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="19624.22" y="1919.5" >clGetPl..</text>
+</g>
+<g >
+<title>std::_Base_bitset&lt;1ul&gt;::_M_do_reset (76,540,631 samples, 0.48%)</title><rect x="15590.5" y="1893" width="96.7" height="15.0" fill="rgb(252,217,52)" rx="2" ry="2" />
+<text  x="15593.49" y="1903.5" >std::_Base_..</text>
+</g>
+<g >
+<title>std::pair&lt;int, int&gt;&amp; std::vector&lt;std::pair&lt;int, int&gt;, std::allocator&lt;std::pair&lt;int, int&gt; &gt; &gt;::emplace_back&lt;std::pair&lt;int, int&gt; &gt; (241,374,833 samples, 1.53%)</title><rect x="19316.3" y="1957" width="304.9" height="15.0" fill="rgb(214,43,10)" rx="2" ry="2" />
+<text  x="19319.29" y="1967.5" >std::pair&lt;int, int&gt;&amp; std::vector&lt;std::pai..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1381" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1391.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::Dispatcher::dispatch (243,841,364 samples, 1.54%)</title><rect x="14274.7" y="1941" width="308.1" height="15.0" fill="rgb(236,142,34)" rx="2" ry="2" />
+<text  x="14277.75" y="1951.5" >spla::Dispatcher::dispatch</text>
+</g>
+<g >
+<title>std::vector&lt;std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;, std::allocator&lt;std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt; &gt; &gt;::operator[] (82,163,931 samples, 0.52%)</title><rect x="15788.8" y="1957" width="103.8" height="15.0" fill="rgb(248,198,47)" rx="2" ry="2" />
+<text  x="15791.76" y="1967.5" >std::vector&lt;..</text>
+</g>
+<g >
+<title>void std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::_M_realloc_insert&lt;std::pair&lt;unsigned int, float&gt; &gt; (750,901,614 samples, 4.75%)</title><rect x="12276.5" y="1909" width="948.6" height="15.0" fill="rgb(248,200,48)" rx="2" ry="2" />
+<text  x="12279.46" y="1919.5" >void std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::_M_realloc_insert&lt;std::pair&lt;uns..</text>
+</g>
+<g >
+<title>tbb::detail::r1::cache_aligned_allocate (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1573" width="23.4" height="15.0" fill="rgb(205,2,0)" rx="2" ry="2" />
+<text  x="19670.49" y="1583.5" >t..</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;::_M_insert_rval (777,512,698 samples, 4.92%)</title><rect x="16100.7" y="1925" width="982.2" height="15.0" fill="rgb(208,17,4)" rx="2" ry="2" />
+<text  x="16103.68" y="1935.5" >std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;::_M_insert_rval</text>
+</g>
+<g >
+<title>std::bitset&lt;8ul&gt;::_M_check (81,908,374 samples, 0.52%)</title><rect x="15372.2" y="1861" width="103.5" height="15.0" fill="rgb(248,200,47)" rx="2" ry="2" />
+<text  x="15375.22" y="1871.5" >std::bitset&lt;..</text>
+</g>
+<g >
+<title>spla::TMatrix&lt;float&gt;::set_float (1,747,221,224 samples, 11.05%)</title><rect x="11017.8" y="1973" width="2207.3" height="15.0" fill="rgb(222,81,19)" rx="2" ry="2" />
+<text  x="11020.81" y="1983.5" >spla::TMatrix&lt;float&gt;::set_float</text>
+</g>
+<g >
+<title>std::pair&lt;int, int&gt;* std::__uninitialized_copy_a&lt;__gnu_cxx::__normal_iterator&lt;std::pair&lt;int, int&gt; const*, std::vector&lt;std::pair&lt;int, int&gt;, std::allocator&lt;std::pair&lt;int, int&gt; &gt; &gt; &gt;, __gnu_cxx::__normal_iterator&lt;std::pair&lt;int, int&gt; const*, std::vector&lt;std::pair&lt;int, int&gt;, std::allocator&lt;std::pair&lt;int, int&gt; &gt; &gt; &gt;, std::pair&lt;int, int&gt;*, std::pair&lt;int, int&gt; &gt; (74,509,449 samples, 0.47%)</title><rect x="10820.4" y="1957" width="94.2" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="10823.43" y="1967.5" >std::pair&lt;i..</text>
+</g>
+<g >
+<title>robin_hood::detail::Table&lt;true, 80ul, unsigned int, int, robin_hood::hash&lt;unsigned int, void&gt;, std::equal_to&lt;unsigned int&gt; &gt;::nextWhileLess (81,191,281 samples, 0.51%)</title><rect x="14172.2" y="1797" width="102.5" height="15.0" fill="rgb(210,25,6)" rx="2" ry="2" />
+<text  x="14175.18" y="1807.5" >robin_hood::..</text>
+</g>
+<g >
+<title>[libc.so.6] (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1717" width="69.7" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="19624.22" y="1727.5" >[libc.s..</text>
+</g>
+<g >
+<title>[libc.so.6] (83,797,346 samples, 0.53%)</title><rect x="10249.7" y="2021" width="105.9" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="10252.69" y="2031.5" >[libc.so.6]</text>
+</g>
+<g >
+<title>[libc.so.6] (84,943,743 samples, 0.54%)</title><rect x="1661.3" y="2037" width="107.4" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="1664.35" y="2047.5" >[libc.so.6]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1493" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1503.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::TMatrix&lt;int&gt;::~TMatrix (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1909" width="104.6" height="15.0" fill="rgb(222,78,18)" rx="2" ry="2" />
+<text  x="19888.38" y="1919.5" >spla::TMatri..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="69" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="79.5" >[unknown]</text>
+</g>
+<g >
+<title>[libc.so.6] (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1845" width="69.7" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="19624.22" y="1855.5" >[libc.s..</text>
+</g>
+<g >
+<title>float* std::__uninitialized_default_n&lt;float*, unsigned long&gt; (15,786,225 samples, 0.10%)</title><rect x="14690.6" y="1717" width="19.9" height="15.0" fill="rgb(236,145,34)" rx="2" ry="2" />
+<text  x="14693.60" y="1727.5" ></text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="629" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="639.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::TMatrix&lt;float&gt;::~TMatrix (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1909" width="186.6" height="15.0" fill="rgb(210,26,6)" rx="2" ry="2" />
+<text  x="14968.28" y="1919.5" >spla::TMatrix&lt;float&gt;::~T..</text>
+</g>
+<g >
+<title>std::pair&lt;unsigned int, float&gt;* std::__relocate_a&lt;std::pair&lt;unsigned int, float&gt;*, std::pair&lt;unsigned int, float&gt;*, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt; (167,204,442 samples, 1.06%)</title><rect x="13013.8" y="1877" width="211.3" height="15.0" fill="rgb(247,194,46)" rx="2" ry="2" />
+<text  x="13016.85" y="1887.5" >std::pair&lt;unsigned int, flo..</text>
+</g>
+<g >
+<title>khrIcdOsVendorsEnumerateOnce (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1877" width="69.7" height="15.0" fill="rgb(246,190,45)" rx="2" ry="2" />
+<text  x="19624.22" y="1887.5" >khrIcdO..</text>
+</g>
+<g >
+<title>spla::TDecorationStorage&lt;int, spla::FormatMatrix, 8&gt;::~TDecorationStorage (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1877" width="104.6" height="15.0" fill="rgb(215,50,12)" rx="2" ry="2" />
+<text  x="19888.38" y="1887.5" >spla::TDecor..</text>
+</g>
+<g >
+<title>std::__cxx11::basic_istringstream&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;::basic_istringstream (101,672,233 samples, 0.64%)</title><rect x="17104.8" y="1973" width="128.4" height="15.0" fill="rgb(232,126,30)" rx="2" ry="2" />
+<text  x="17107.80" y="1983.5" >std::__cxx11::ba..</text>
+</g>
+<g >
+<title>std::ios_base::_M_init (18,814,688 samples, 0.12%)</title><rect x="17209.5" y="1941" width="23.7" height="15.0" fill="rgb(228,107,25)" rx="2" ry="2" />
+<text  x="17212.48" y="1951.5" >s..</text>
+</g>
+<g >
+<title>void std::__invoke_impl&lt;void, spla::register_formats_matrix&lt;float&gt; (217,427,564 samples, 1.37%)</title><rect x="14690.6" y="1813" width="274.7" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
+<text  x="14693.60" y="1823.5" >void std::__invoke_impl&lt;void, spla::..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1781" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1791.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="981" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="991.5" >[unknown]</text>
+</g>
+<g >
+<title>[ld-linux-x86-64.so.2] (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1669" width="69.7" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="19624.22" y="1679.5" >[ld-lin..</text>
+</g>
+<g >
+<title>spla::Algo_m_reduce_by_row_cpu&lt;int&gt;::execute_lil (160,124,831 samples, 1.01%)</title><rect x="14274.7" y="1909" width="202.3" height="15.0" fill="rgb(222,79,19)" rx="2" ry="2" />
+<text  x="14277.75" y="1919.5" >spla::Algo_m_reduce_by_row..</text>
+</g>
+<g >
+<title>void std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;::_M_realloc_insert&lt;std::pair&lt;unsigned int, int&gt; &gt; (613,516,795 samples, 3.88%)</title><rect x="16307.9" y="1909" width="775.0" height="15.0" fill="rgb(232,127,30)" rx="2" ry="2" />
+<text  x="16310.85" y="1919.5" >void std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;::_M_realloc_..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="421" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="431.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::TVector&lt;int&gt;::get_int (830,899,644 samples, 5.25%)</title><rect x="13225.1" y="1973" width="1049.6" height="15.0" fill="rgb(235,141,33)" rx="2" ry="2" />
+<text  x="13228.08" y="1983.5" >spla::TVector&lt;int&gt;::get_int</text>
+</g>
+<g >
+<title>std::pair&lt;int, int&gt;* std::__do_uninit_copy&lt;__gnu_cxx::__normal_iterator&lt;std::pair&lt;int, int&gt; const*, std::vector&lt;std::pair&lt;int, int&gt;, std::allocator&lt;std::pair&lt;int, int&gt; &gt; &gt; &gt;, __gnu_cxx::__normal_iterator&lt;std::pair&lt;int, int&gt; const*, std::vector&lt;std::pair&lt;int, int&gt;, std::allocator&lt;std::pair&lt;int, int&gt; &gt; &gt; &gt;, std::pair&lt;int, int&gt;*&gt; (74,509,449 samples, 0.47%)</title><rect x="10820.4" y="1925" width="94.2" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="10823.43" y="1935.5" >std::pair&lt;i..</text>
+</g>
+<g >
+<title>main (7,258,437,399 samples, 45.89%)</title><rect x="10820.4" y="2005" width="9169.6" height="15.0" fill="rgb(243,179,42)" rx="2" ry="2" />
+<text  x="10823.43" y="2015.5" >main</text>
+</g>
+<g >
+<title>std::vector&lt;std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;, std::allocator&lt;std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt; &gt; &gt;::~vector (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1765" width="104.6" height="15.0" fill="rgb(224,90,21)" rx="2" ry="2" />
+<text  x="19888.38" y="1775.5" >std::vector&lt;..</text>
+</g>
+<g >
+<title>spla::Dispatcher::dispatch (302,767,285 samples, 1.91%)</title><rect x="14582.8" y="1941" width="382.5" height="15.0" fill="rgb(236,142,34)" rx="2" ry="2" />
+<text  x="14585.79" y="1951.5" >spla::Dispatcher::dispatch</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1797" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1807.5" >[unknown]</text>
+</g>
+<g >
+<title>__dynamic_cast (166,111,404 samples, 1.05%)</title><rect x="13857.4" y="1925" width="209.8" height="15.0" fill="rgb(227,102,24)" rx="2" ry="2" />
+<text  x="13860.36" y="1935.5" >__dynamic_cast</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="997" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1007.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1205" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1215.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="341" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="351.5" >[unknown]</text>
+</g>
+<g >
+<title>std::array&lt;spla::ref_ptr&lt;spla::TDecoration&lt;int&gt; &gt;, 8ul&gt;::~array (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1861" width="104.6" height="15.0" fill="rgb(221,77,18)" rx="2" ry="2" />
+<text  x="19888.38" y="1871.5" >std::array&lt;s..</text>
+</g>
+<g >
+<title>spla::ref_ptr&lt;spla::Matrix&gt;::~ref_ptr (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1973" width="186.6" height="15.0" fill="rgb(227,102,24)" rx="2" ry="2" />
+<text  x="14968.28" y="1983.5" >spla::ref_ptr&lt;spla::Matr..</text>
+</g>
+<g >
+<title>[libc.so.6] (439,780,919 samples, 2.78%)</title><rect x="10.0" y="2053" width="555.6" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="13.00" y="2063.5" >[libc.so.6]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1653" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1663.5" >[unknown]</text>
+</g>
+<g >
+<title>std::_Vector_base&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;::_Vector_impl::~_Vector_impl (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1685" width="104.6" height="15.0" fill="rgb(238,155,37)" rx="2" ry="2" />
+<text  x="19888.38" y="1695.5" >std::_Vector..</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;* std::__uninitialized_default_n&lt;std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;*, unsigned long&gt; (9,991,927 samples, 0.06%)</title><rect x="15577.9" y="1765" width="12.6" height="15.0" fill="rgb(238,151,36)" rx="2" ry="2" />
+<text  x="15580.87" y="1775.5" ></text>
+</g>
+<g >
+<title>std::pair&lt;int, int&gt;* std::__relocate_a_1&lt;std::pair&lt;int, int&gt;*, std::pair&lt;int, int&gt;*, std::allocator&lt;std::pair&lt;int, int&gt; &gt; &gt; (159,027,727 samples, 1.01%)</title><rect x="19420.3" y="1893" width="200.9" height="15.0" fill="rgb(237,148,35)" rx="2" ry="2" />
+<text  x="19423.32" y="1903.5" >std::pair&lt;int, int&gt;* std::..</text>
+</g>
+<g >
+<title>[ld-linux-x86-64.so.2] (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1621" width="69.7" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="19624.22" y="1631.5" >[ld-lin..</text>
+</g>
+<g >
+<title>std::__new_allocator&lt;std::pair&lt;unsigned int, float&gt; &gt;::allocate (166,276,898 samples, 1.05%)</title><rect x="12488.3" y="1877" width="210.1" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="12491.33" y="1887.5" >std::__new_allocator&lt;std::p..</text>
+</g>
+<g >
+<title>pthread_once (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1541" width="23.4" height="15.0" fill="rgb(224,87,20)" rx="2" ry="2" />
+<text  x="19670.49" y="1551.5" >p..</text>
+</g>
+<g >
+<title> (67,853,480 samples, 0.43%)</title><rect x="14604.9" y="1861" width="85.7" height="15.0" fill="rgb(232,128,30)" rx="2" ry="2" />
+<text  x="14607.88" y="1871.5" ></text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="197" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="207.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="213" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="223.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1173" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1183.5" >[unknown]</text>
+</g>
+<g >
+<title>[libc.so.6] (83,169,049 samples, 0.53%)</title><rect x="12593.3" y="1829" width="105.1" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="12596.32" y="1839.5" >[libc.so.6]</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;int, int&gt;, std::allocator&lt;std::pair&lt;int, int&gt; &gt; &gt;::_S_relocate (159,027,727 samples, 1.01%)</title><rect x="19420.3" y="1925" width="200.9" height="15.0" fill="rgb(242,172,41)" rx="2" ry="2" />
+<text  x="19423.32" y="1935.5" >std::vector&lt;std::pair&lt;int,..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1685" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1695.5" >[unknown]</text>
+</g>
+<g >
+<title>[ld-linux-x86-64.so.2] (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1749" width="69.7" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="19624.22" y="1759.5" >[ld-lin..</text>
+</g>
+<g >
+<title>std::array&lt;spla::ref_ptr&lt;spla::TDecoration&lt;float&gt; &gt;, 8ul&gt;::~array (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1877" width="186.6" height="15.0" fill="rgb(210,25,5)" rx="2" ry="2" />
+<text  x="14968.28" y="1887.5" >std::array&lt;spla::ref_ptr..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="661" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="671.5" >[unknown]</text>
+</g>
+<g >
+<title>pthread_once (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1861" width="69.7" height="15.0" fill="rgb(224,87,20)" rx="2" ry="2" />
+<text  x="19624.22" y="1871.5" >pthread..</text>
+</g>
+<g >
+<title>[libc.so.6] (83,169,049 samples, 0.53%)</title><rect x="12593.3" y="1845" width="105.1" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="12596.32" y="1855.5" >[libc.so.6]</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;::~vector (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1717" width="104.6" height="15.0" fill="rgb(219,65,15)" rx="2" ry="2" />
+<text  x="19888.38" y="1727.5" >std::vector&lt;..</text>
+</g>
+<g >
+<title>operator new (83,169,049 samples, 0.53%)</title><rect x="12593.3" y="1861" width="105.1" height="15.0" fill="rgb(216,51,12)" rx="2" ry="2" />
+<text  x="12596.32" y="1871.5" >operator new</text>
+</g>
+<g >
+<title>spla::Algo_mxv_masked_cl&lt;float&gt;::execute (302,767,285 samples, 1.91%)</title><rect x="14582.8" y="1925" width="382.5" height="15.0" fill="rgb(226,97,23)" rx="2" ry="2" />
+<text  x="14585.79" y="1935.5" >spla::Algo_mxv_masked_cl&lt;float&gt;::execute</text>
+</g>
+<g >
+<title>__gnu_cxx::__normal_iterator&lt;std::pair&lt;unsigned int, float&gt;*, std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt; &gt; std::__upper_bound&lt;__gnu_cxx::__normal_iterator&lt;std::pair&lt;unsigned int, float&gt;*, std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt; &gt;, std::pair&lt;unsigned int, float&gt;, __gnu_cxx::__ops::_Val_comp_iter&lt;spla::cpu_lil_add_element&lt;float&gt; (250,007,758 samples, 1.58%)</title><rect x="11545.6" y="1925" width="315.8" height="15.0" fill="rgb(219,68,16)" rx="2" ry="2" />
+<text  x="11548.58" y="1935.5" >__gnu_cxx::__normal_iterator&lt;std::pair&lt;uns..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="389" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="399.5" >[unknown]</text>
+</g>
+<g >
+<title>[libintelocl.so.2024.18.12.0] (50,800,455 samples, 0.32%)</title><rect x="1768.7" y="2037" width="64.1" height="15.0" fill="rgb(207,12,3)" rx="2" ry="2" />
+<text  x="1771.66" y="2047.5" >[libint..</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::_M_check_len (161,525,097 samples, 1.02%)</title><rect x="12072.4" y="1909" width="204.1" height="15.0" fill="rgb(223,86,20)" rx="2" ry="2" />
+<text  x="12075.41" y="1919.5" >std::vector&lt;std::pair&lt;unsi..</text>
+</g>
+<g >
+<title>[libc.so.6] (80,779,876 samples, 0.51%)</title><rect x="17336.0" y="1941" width="102.0" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="17338.95" y="1951.5" >[libc.so.6]</text>
+</g>
+<g >
+<title>spla::TMatrix&lt;float&gt;::~TMatrix (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1925" width="186.6" height="15.0" fill="rgb(210,26,6)" rx="2" ry="2" />
+<text  x="14968.28" y="1935.5" >spla::TMatrix&lt;float&gt;::~T..</text>
+</g>
+<g >
+<title>[ld-linux-x86-64.so.2] (12,110,319 samples, 0.08%)</title><rect x="19652.2" y="1573" width="15.3" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="19655.19" y="1583.5" ></text>
+</g>
+<g >
+<title>bool __gnu_cxx::__ops::_Val_comp_iter&lt;spla::cpu_lil_add_element&lt;int&gt; (83,176,124 samples, 0.53%)</title><rect x="15995.6" y="1909" width="105.1" height="15.0" fill="rgb(223,82,19)" rx="2" ry="2" />
+<text  x="15998.60" y="1919.5" >bool __gnu_c..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="293" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="303.5" >[unknown]</text>
+</g>
+<g >
+<title>std::istream::sentry::sentry (81,228,169 samples, 0.51%)</title><rect x="17743.0" y="1957" width="102.6" height="15.0" fill="rgb(240,163,39)" rx="2" ry="2" />
+<text  x="17746.02" y="1967.5" >std::istream..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="677" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="687.5" >[unknown]</text>
+</g>
+<g >
+<title>[libc.so.6] (78,414,164 samples, 0.50%)</title><rect x="15052.8" y="1637" width="99.1" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="15055.84" y="1647.5" >[libc.so.6]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="949" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="959.5" >[unknown]</text>
+</g>
+<g >
+<title>[perf-39383.map] (6,662,602,976 samples, 42.13%)</title><rect x="1832.8" y="2037" width="8416.9" height="15.0" fill="rgb(243,175,42)" rx="2" ry="2" />
+<text  x="1835.84" y="2047.5" >[perf-39383.map]</text>
+</g>
+<g >
+<title>[libc.so.6] (78,414,164 samples, 0.50%)</title><rect x="15052.8" y="1653" width="99.1" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="15055.84" y="1663.5" >[libc.so.6]</text>
+</g>
+<g >
+<title>__libc_start_main (7,258,437,399 samples, 45.89%)</title><rect x="10820.4" y="2037" width="9169.6" height="15.0" fill="rgb(236,142,34)" rx="2" ry="2" />
+<text  x="10823.43" y="2047.5" >__libc_start_main</text>
+</g>
+<g >
+<title>operator new (9,991,927 samples, 0.06%)</title><rect x="15577.9" y="1733" width="12.6" height="15.0" fill="rgb(216,51,12)" rx="2" ry="2" />
+<text  x="15580.87" y="1743.5" ></text>
+</g>
+<g >
+<title>std::_Vector_base&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::~_Vector_base (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1717" width="186.6" height="15.0" fill="rgb(245,185,44)" rx="2" ry="2" />
+<text  x="14968.28" y="1727.5" >std::_Vector_base&lt;std::p..</text>
+</g>
+<g >
+<title>spla::CpuDokVec&lt;int&gt;* spla::TDecorationStorage&lt;int, spla::FormatVector, 5&gt;::get&lt;spla::CpuDokVec&lt;int&gt; &gt; (166,111,404 samples, 1.05%)</title><rect x="13857.4" y="1941" width="209.8" height="15.0" fill="rgb(217,58,14)" rx="2" ry="2" />
+<text  x="13860.36" y="1951.5" >spla::CpuDokVec&lt;int&gt;* spla:..</text>
+</g>
+<g >
+<title>[libc.so.6] (83,797,346 samples, 0.53%)</title><rect x="10249.7" y="1989" width="105.9" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="10252.69" y="1999.5" >[libc.so.6]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1429" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1439.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1525" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1535.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="101" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="111.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1237" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1247.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::exec_m_reduce_by_row (243,841,364 samples, 1.54%)</title><rect x="14274.7" y="1973" width="308.1" height="15.0" fill="rgb(225,94,22)" rx="2" ry="2" />
+<text  x="14277.75" y="1983.5" >spla::exec_m_reduce_by_row</text>
+</g>
+<g >
+<title>[ld-linux-x86-64.so.2] (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1701" width="69.7" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="19624.22" y="1711.5" >[ld-lin..</text>
+</g>
+<g >
+<title>spla::CpuDokVec&lt;int&gt;* spla::TVector&lt;int&gt;::get&lt;spla::CpuDokVec&lt;int&gt; &gt; (166,111,404 samples, 1.05%)</title><rect x="13857.4" y="1957" width="209.8" height="15.0" fill="rgb(217,58,14)" rx="2" ry="2" />
+<text  x="13860.36" y="1967.5" >spla::CpuDokVec&lt;int&gt;* spla:..</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::~vector (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1733" width="186.6" height="15.0" fill="rgb(246,191,45)" rx="2" ry="2" />
+<text  x="14968.28" y="1743.5" >std::vector&lt;std::pair&lt;un..</text>
+</g>
+<g >
+<title>[libtbb.so.12.17] (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1557" width="23.4" height="15.0" fill="rgb(237,150,35)" rx="2" ry="2" />
+<text  x="19670.49" y="1567.5" >[..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1509" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1519.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1109" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1119.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="2005" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="2015.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1909" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1919.5" >[unknown]</text>
+</g>
+<g >
+<title>std::basic_ios&lt;char, std::char_traits&lt;char&gt; &gt;::init (18,814,688 samples, 0.12%)</title><rect x="17209.5" y="1957" width="23.7" height="15.0" fill="rgb(206,7,1)" rx="2" ry="2" />
+<text  x="17212.48" y="1967.5" >s..</text>
+</g>
+<g >
+<title>void std::vector&lt;std::pair&lt;int, int&gt;, std::allocator&lt;std::pair&lt;int, int&gt; &gt; &gt;::_M_realloc_append&lt;std::pair&lt;int, int&gt; &gt; (159,027,727 samples, 1.01%)</title><rect x="19420.3" y="1941" width="200.9" height="15.0" fill="rgb(226,97,23)" rx="2" ry="2" />
+<text  x="19423.32" y="1951.5" >void std::vector&lt;std::pair..</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;::insert (794,846,397 samples, 5.03%)</title><rect x="16100.7" y="1941" width="1004.1" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="16103.68" y="1951.5" >std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;::insert</text>
+</g>
+<g >
+<title>SPLAGraph::~SPLAGraph (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1973" width="104.6" height="15.0" fill="rgb(238,154,36)" rx="2" ry="2" />
+<text  x="19888.38" y="1983.5" >SPLAGraph::~..</text>
+</g>
+<g >
+<title>std::bitset&lt;8ul&gt;::_Unchecked_set (80,401,692 samples, 0.51%)</title><rect x="15687.2" y="1893" width="101.6" height="15.0" fill="rgb(243,175,42)" rx="2" ry="2" />
+<text  x="15690.18" y="1903.5" >std::bitset&lt;..</text>
+</g>
+<g >
+<title>dlopen (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1461" width="23.4" height="15.0" fill="rgb(216,51,12)" rx="2" ry="2" />
+<text  x="19670.49" y="1471.5" >d..</text>
+</g>
+<g >
+<title>std::_Function_handler&lt;int  (78,401,700 samples, 0.50%)</title><rect x="14378.0" y="1877" width="99.0" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
+<text  x="14380.99" y="1887.5" >std::_Funct..</text>
+</g>
+<g >
+<title>std::_Vector_base&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::_M_allocate (166,276,898 samples, 1.05%)</title><rect x="12488.3" y="1893" width="210.1" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="12491.33" y="1903.5" >std::_Vector_base&lt;std::pair..</text>
+</g>
+<g >
+<title>__gnu_cxx::__normal_iterator&lt;std::pair&lt;unsigned int, int&gt;*, std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt; &gt; std::upper_bound&lt;__gnu_cxx::__normal_iterator&lt;std::pair&lt;unsigned int, int&gt;*, std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt; &gt;, std::pair&lt;unsigned int, int&gt;, spla::cpu_lil_add_element&lt;int&gt; (83,176,124 samples, 0.53%)</title><rect x="15995.6" y="1941" width="105.1" height="15.0" fill="rgb(219,66,15)" rx="2" ry="2" />
+<text  x="15998.60" y="1951.5" >__gnu_cxx::_..</text>
+</g>
+<g >
+<title>[libtbb.so.12.17] (50,800,455 samples, 0.32%)</title><rect x="1768.7" y="2021" width="64.1" height="15.0" fill="rgb(237,150,35)" rx="2" ry="2" />
+<text  x="1771.66" y="2031.5" >[libtbb..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="469" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="479.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="501" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="511.5" >[unknown]</text>
+</g>
+<g >
+<title>[libtbb.so.12.17] (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1477" width="23.4" height="15.0" fill="rgb(237,150,35)" rx="2" ry="2" />
+<text  x="19670.49" y="1487.5" >[..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1541" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1551.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1733" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1743.5" >[unknown]</text>
+</g>
+<g >
+<title>std::vector&lt;std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;, std::allocator&lt;std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt; &gt; &gt;::resize (9,991,927 samples, 0.06%)</title><rect x="15577.9" y="1813" width="12.6" height="15.0" fill="rgb(245,184,44)" rx="2" ry="2" />
+<text  x="15580.87" y="1823.5" ></text>
+</g>
+<g >
+<title>std::function&lt;int  (78,401,700 samples, 0.50%)</title><rect x="14378.0" y="1893" width="99.0" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="14380.99" y="1903.5" >std::functi..</text>
+</g>
+<g >
+<title>spla::TDecorationStorage&lt;int, spla::FormatMatrix, 8&gt;::invalidate (76,540,631 samples, 0.48%)</title><rect x="15590.5" y="1925" width="96.7" height="15.0" fill="rgb(244,181,43)" rx="2" ry="2" />
+<text  x="15593.49" y="1935.5" >spla::TDeco..</text>
+</g>
+<g >
+<title>Parser::ParseSNAP (3,537,812,139 samples, 22.37%)</title><rect x="15151.9" y="1989" width="4469.3" height="15.0" fill="rgb(250,210,50)" rx="2" ry="2" />
+<text  x="15154.90" y="1999.5" >Parser::ParseSNAP</text>
+</g>
+<g >
+<title>robin_hood::detail::Table&lt;true, 80ul, unsigned int, int, robin_hood::hash&lt;unsigned int, void&gt;, std::equal_to&lt;unsigned int&gt; &gt;::find (417,216,475 samples, 2.64%)</title><rect x="13330.3" y="1957" width="527.1" height="15.0" fill="rgb(245,187,44)" rx="2" ry="2" />
+<text  x="13333.29" y="1967.5" >robin_hood::detail::Table&lt;true, 80ul, unsigned int, int, robin_hood::has..</text>
+</g>
+<g >
+<title>std::__new_allocator&lt;std::pair&lt;unsigned int, int&gt; &gt;::~__new_allocator (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1669" width="104.6" height="15.0" fill="rgb(229,113,27)" rx="2" ry="2" />
+<text  x="19888.38" y="1679.5" >std::__new_a..</text>
+</g>
+<g >
+<title>khrIcdOsLibraryLoad (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1797" width="69.7" height="15.0" fill="rgb(239,159,38)" rx="2" ry="2" />
+<text  x="19624.22" y="1807.5" >khrIcdO..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1701" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1711.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1573" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1583.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::CpuLil&lt;int&gt;* spla::TDecorationStorage&lt;int, spla::FormatMatrix, 8&gt;::get&lt;spla::CpuLil&lt;int&gt; &gt; (91,536,994 samples, 0.58%)</title><rect x="15256.6" y="1941" width="115.6" height="15.0" fill="rgb(241,169,40)" rx="2" ry="2" />
+<text  x="15259.59" y="1951.5" >spla::CpuLil&lt;i..</text>
+</g>
+<g >
+<title>unsigned long const&amp; std::min&lt;unsigned long&gt; (80,361,411 samples, 0.51%)</title><rect x="17641.5" y="1925" width="101.5" height="15.0" fill="rgb(207,13,3)" rx="2" ry="2" />
+<text  x="17644.50" y="1935.5" >unsigned lon..</text>
+</g>
+<g >
+<title>void spla::unref&lt;spla::Matrix&gt; (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1941" width="104.6" height="15.0" fill="rgb(207,12,2)" rx="2" ry="2" />
+<text  x="19888.38" y="1951.5" >void spla::u..</text>
+</g>
+<g >
+<title>dlopen (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1781" width="69.7" height="15.0" fill="rgb(216,51,12)" rx="2" ry="2" />
+<text  x="19624.22" y="1791.5" >dlopen</text>
+</g>
+<g >
+<title>std::pair&lt;std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;, std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt; &gt;&amp; ankerl::v1_0_2::svector&lt;std::pair&lt;std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;, std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt; &gt;, 8ul&gt;::emplace_back&lt;char const*&amp;, std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt; &gt; (17,486,241 samples, 0.11%)</title><rect x="14582.8" y="1861" width="22.1" height="15.0" fill="rgb(222,82,19)" rx="2" ry="2" />
+<text  x="14585.79" y="1871.5" >s..</text>
+</g>
+<g >
+<title>std::enable_if&lt;is_invocable_r_v&lt;void, spla::register_formats_matrix&lt;int&gt; (9,991,927 samples, 0.06%)</title><rect x="15577.9" y="1877" width="12.6" height="15.0" fill="rgb(241,167,40)" rx="2" ry="2" />
+<text  x="15580.87" y="1887.5" ></text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::operator[] (94,517,507 samples, 0.60%)</title><rect x="14845.9" y="1765" width="119.4" height="15.0" fill="rgb(220,69,16)" rx="2" ry="2" />
+<text  x="14848.88" y="1775.5" >std::vector&lt;st..</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;::cbegin (17,333,699 samples, 0.11%)</title><rect x="17082.9" y="1925" width="21.9" height="15.0" fill="rgb(211,27,6)" rx="2" ry="2" />
+<text  x="17085.91" y="1935.5" >s..</text>
+</g>
+<g >
+<title>void spla::cpu_dense_vec_to_dok&lt;int&gt; (81,191,281 samples, 0.51%)</title><rect x="14172.2" y="1845" width="102.5" height="15.0" fill="rgb(234,133,31)" rx="2" ry="2" />
+<text  x="14175.18" y="1855.5" >void spla::c..</text>
+</g>
+<g >
+<title>spla::TMatrix&lt;int&gt;::~TMatrix (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1893" width="104.6" height="15.0" fill="rgb(222,78,18)" rx="2" ry="2" />
+<text  x="19888.38" y="1903.5" >spla::TMatri..</text>
+</g>
+<g >
+<title>std::bitset&lt;8ul&gt;::reset (84,091,329 samples, 0.53%)</title><rect x="11229.3" y="1925" width="106.2" height="15.0" fill="rgb(234,135,32)" rx="2" ry="2" />
+<text  x="11232.26" y="1935.5" >std::bitset&lt;8..</text>
+</g>
+<g >
+<title>void std::__relocate_object_a&lt;std::pair&lt;unsigned int, float&gt;, std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt; (167,204,442 samples, 1.06%)</title><rect x="13013.8" y="1845" width="211.3" height="15.0" fill="rgb(205,3,0)" rx="2" ry="2" />
+<text  x="13016.85" y="1855.5" >void std::__relocate_object..</text>
+</g>
+<g >
+<title>khrIcdVendorAdd (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1813" width="69.7" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="19624.22" y="1823.5" >khrIcdV..</text>
+</g>
+<g >
+<title>unsigned long const&amp; std::min&lt;unsigned long&gt; (79,937,738 samples, 0.51%)</title><rect x="17540.5" y="1909" width="101.0" height="15.0" fill="rgb(207,13,3)" rx="2" ry="2" />
+<text  x="17543.51" y="1919.5" >unsigned lon..</text>
+</g>
+<g >
+<title>spla::TDecorationStorage&lt;int, spla::FormatMatrix, 8&gt;::is_valid (162,783,596 samples, 1.03%)</title><rect x="15372.2" y="1909" width="205.7" height="15.0" fill="rgb(226,100,24)" rx="2" ry="2" />
+<text  x="15375.22" y="1919.5" >spla::TDecorationStorage&lt;in..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1669" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1679.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="517" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="527.5" >[unknown]</text>
+</g>
+<g >
+<title>std::_Tuple_impl&lt;0ul, spla::StorageManager&lt;float, spla::FormatMatrix, 8&gt;*, std::default_delete&lt;spla::StorageManager&lt;float, spla::FormatMatrix, 8&gt; &gt; &gt;::_M_head (83,462,078 samples, 0.53%)</title><rect x="11335.5" y="1845" width="105.4" height="15.0" fill="rgb(238,154,36)" rx="2" ry="2" />
+<text  x="11338.49" y="1855.5" >std::_Tuple_..</text>
+</g>
+<g >
+<title>[libc.so.6] (439,780,919 samples, 2.78%)</title><rect x="10.0" y="2037" width="555.6" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="13.00" y="2047.5" >[libc.so.6]</text>
+</g>
+<g >
+<title>__gnu_cxx::__normal_iterator&lt;std::pair&lt;unsigned int, float&gt;*, std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt; &gt; std::upper_bound&lt;__gnu_cxx::__normal_iterator&lt;std::pair&lt;unsigned int, float&gt;*, std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt; &gt;, std::pair&lt;unsigned int, float&gt;, spla::cpu_lil_add_element&lt;float&gt; (250,007,758 samples, 1.58%)</title><rect x="11545.6" y="1941" width="315.8" height="15.0" fill="rgb(228,108,26)" rx="2" ry="2" />
+<text  x="11548.58" y="1951.5" >__gnu_cxx::__normal_iterator&lt;std::pair&lt;uns..</text>
+</g>
+<g >
+<title>_dl_catch_exception (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1365" width="23.4" height="15.0" fill="rgb(253,223,53)" rx="2" ry="2" />
+<text  x="19670.49" y="1375.5" >_..</text>
+</g>
+<g >
+<title>void std::__relocate_object_a&lt;std::pair&lt;unsigned int, int&gt;, std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt; (82,033,827 samples, 0.52%)</title><rect x="16979.3" y="1845" width="103.6" height="15.0" fill="rgb(239,160,38)" rx="2" ry="2" />
+<text  x="16982.27" y="1855.5" >void std::__..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1285" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1295.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::RefCnt::rel_ref (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1829" width="186.6" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="14968.28" y="1839.5" >spla::RefCnt::rel_ref</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1765" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1775.5" >[unknown]</text>
+</g>
+<g >
+<title>std::vector&lt;std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;, std::allocator&lt;std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt; &gt; &gt;::~vector (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1781" width="186.6" height="15.0" fill="rgb(229,111,26)" rx="2" ry="2" />
+<text  x="14968.28" y="1791.5" >std::vector&lt;std::vector&lt;..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="149" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="159.5" >[unknown]</text>
+</g>
+<g >
+<title>void std::__invoke_impl&lt;void, spla::register_formats_vector&lt;int&gt; (81,191,281 samples, 0.51%)</title><rect x="14172.2" y="1877" width="102.5" height="15.0" fill="rgb(227,102,24)" rx="2" ry="2" />
+<text  x="14175.18" y="1887.5" >void std::__..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1189" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1199.5" >[unknown]</text>
+</g>
+<g >
+<title>PageRankRunner::RunAlgo (3,354,194,463 samples, 21.21%)</title><rect x="10914.6" y="1989" width="4237.3" height="15.0" fill="rgb(253,221,53)" rx="2" ry="2" />
+<text  x="10917.56" y="1999.5" >PageRankRunner::RunAlgo</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1317" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1327.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1557" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1567.5" >[unknown]</text>
+</g>
+<g >
+<title>void spla::cpu_lil_to_csr&lt;float&gt; (201,641,339 samples, 1.27%)</title><rect x="14710.5" y="1781" width="254.8" height="15.0" fill="rgb(206,8,1)" rx="2" ry="2" />
+<text  x="14713.55" y="1791.5" >void spla::cpu_lil_to_csr&lt;float&gt;</text>
+</g>
+<g >
+<title>spla::StorageManager&lt;int, spla::FormatMatrix, 8&gt;::validate_rw (172,775,523 samples, 1.09%)</title><rect x="15372.2" y="1925" width="218.3" height="15.0" fill="rgb(208,14,3)" rx="2" ry="2" />
+<text  x="15375.22" y="1935.5" >spla::StorageManager&lt;int, sp..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="2037" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="2047.5" >[unknown]</text>
+</g>
+<g >
+<title>unsigned long robin_hood::detail::Table&lt;true, 80ul, unsigned int, int, robin_hood::hash&lt;unsigned int, void&gt;, std::equal_to&lt;unsigned int&gt; &gt;::findIdx&lt;unsigned int&gt; (166,156,178 samples, 1.05%)</title><rect x="13647.5" y="1941" width="209.9" height="15.0" fill="rgb(241,169,40)" rx="2" ry="2" />
+<text  x="13650.46" y="1951.5" >unsigned long robin_hood::d..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="245" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="255.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="325" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="335.5" >[unknown]</text>
+</g>
+<g >
+<title>std::function&lt;void  (81,191,281 samples, 0.51%)</title><rect x="14172.2" y="1925" width="102.5" height="15.0" fill="rgb(207,13,3)" rx="2" ry="2" />
+<text  x="14175.18" y="1935.5" >std::functio..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="837" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="847.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="789" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="799.5" >[unknown]</text>
+</g>
+<g >
+<title>spla::TMatrix&lt;int&gt;::set_int (1,463,010,609 samples, 9.25%)</title><rect x="15256.6" y="1973" width="1848.2" height="15.0" fill="rgb(245,185,44)" rx="2" ry="2" />
+<text  x="15259.59" y="1983.5" >spla::TMatrix&lt;int&gt;::set_int</text>
+</g>
+<g >
+<title>spla::ref_ptr&lt;spla::TDecoration&lt;int&gt; &gt;::~ref_ptr (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1845" width="104.6" height="15.0" fill="rgb(248,199,47)" rx="2" ry="2" />
+<text  x="19888.38" y="1855.5" >spla::ref_pt..</text>
+</g>
+<g >
+<title>malloc (83,107,849 samples, 0.53%)</title><rect x="12488.3" y="1861" width="105.0" height="15.0" fill="rgb(230,119,28)" rx="2" ry="2" />
+<text  x="12491.33" y="1871.5" >malloc</text>
+</g>
+<g >
+<title>[libtbb.so.12.17] (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1493" width="23.4" height="15.0" fill="rgb(237,150,35)" rx="2" ry="2" />
+<text  x="19670.49" y="1503.5" >[..</text>
+</g>
+<g >
+<title>[libtbb.so.12.17] (439,780,919 samples, 2.78%)</title><rect x="10.0" y="2021" width="555.6" height="15.0" fill="rgb(237,150,35)" rx="2" ry="2" />
+<text  x="13.00" y="2031.5" >[libtbb.so.12.17]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1221" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1231.5" >[unknown]</text>
+</g>
+<g >
+<title>std::unique_ptr&lt;spla::StorageManager&lt;float, spla::FormatMatrix, 8&gt;, std::default_delete&lt;spla::StorageManager&lt;float, spla::FormatMatrix, 8&gt; &gt; &gt;::operator bool (83,462,078 samples, 0.53%)</title><rect x="11335.5" y="1925" width="105.4" height="15.0" fill="rgb(252,220,52)" rx="2" ry="2" />
+<text  x="11338.49" y="1935.5" >std::unique_..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="277" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="287.5" >[unknown]</text>
+</g>
+<g >
+<title>std::bitset&lt;8ul&gt;::_M_check (84,186,553 samples, 0.53%)</title><rect x="11122.9" y="1909" width="106.4" height="15.0" fill="rgb(248,200,47)" rx="2" ry="2" />
+<text  x="11125.91" y="1919.5" >std::bitset&lt;8..</text>
+</g>
+<g >
+<title>spla::RefCnt::rel_ref (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1941" width="186.6" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="14968.28" y="1951.5" >spla::RefCnt::rel_ref</text>
+</g>
+<g >
+<title>std::__cxx11::basic_string&lt;char, std::char_traits&lt;char&gt;, std::allocator&lt;char&gt; &gt;::size (241,443,250 samples, 1.53%)</title><rect x="17438.0" y="1941" width="305.0" height="15.0" fill="rgb(218,60,14)" rx="2" ry="2" />
+<text  x="17441.00" y="1951.5" >std::__cxx11::basic_string&lt;char, std::cha..</text>
+</g>
+<g >
+<title>std::_Vector_base&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::_M_deallocate (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1701" width="186.6" height="15.0" fill="rgb(211,31,7)" rx="2" ry="2" />
+<text  x="14968.28" y="1711.5" >std::_Vector_base&lt;std::p..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1301" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1311.5" >[unknown]</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1253" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1263.5" >[unknown]</text>
+</g>
+<g >
+<title>[libtbb.so.12.17] (67,998,522 samples, 0.43%)</title><rect x="384.1" y="1989" width="85.9" height="15.0" fill="rgb(237,150,35)" rx="2" ry="2" />
+<text  x="387.05" y="1999.5" >[libtbb.so..</text>
+</g>
+<g >
+<title>spla::CpuLil&lt;float&gt;* spla::TMatrix&lt;float&gt;::get&lt;spla::CpuLil&lt;float&gt; &gt; (83,191,059 samples, 0.53%)</title><rect x="11017.8" y="1957" width="105.1" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="11020.81" y="1967.5" >spla::CpuLil..</text>
+</g>
+<g >
+<title>void spla::unref&lt;spla::Matrix&gt; (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1957" width="186.6" height="15.0" fill="rgb(207,12,2)" rx="2" ry="2" />
+<text  x="14968.28" y="1967.5" >void spla::unref&lt;spla::M..</text>
+</g>
+<g >
+<title>void std::_Destroy&lt;std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;*&gt; (82,812,906 samples, 0.52%)</title><rect x="19885.4" y="1749" width="104.6" height="15.0" fill="rgb(249,205,49)" rx="2" ry="2" />
+<text  x="19888.38" y="1759.5" >void std::_D..</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;::_S_max_size (123,941,024 samples, 0.78%)</title><rect x="16614.8" y="1861" width="156.6" height="15.0" fill="rgb(245,185,44)" rx="2" ry="2" />
+<text  x="16617.80" y="1871.5" >std::vector&lt;std::pai..</text>
+</g>
+<g >
+<title>spla::CpuLil&lt;float&gt;::~CpuLil (147,728,250 samples, 0.93%)</title><rect x="14965.3" y="1797" width="186.6" height="15.0" fill="rgb(214,43,10)" rx="2" ry="2" />
+<text  x="14968.28" y="1807.5" >spla::CpuLil&lt;float&gt;::~Cp..</text>
+</g>
+<g >
+<title>std::enable_if&lt;!std::is_void&lt;int&gt;::value, int&amp;&gt;::type robin_hood::detail::Table&lt;true, 80ul, unsigned int, int, robin_hood::hash&lt;unsigned int, void&gt;, std::equal_to&lt;unsigned int&gt; &gt;::operator[]&lt;int&gt; (81,191,281 samples, 0.51%)</title><rect x="14172.2" y="1829" width="102.5" height="15.0" fill="rgb(218,64,15)" rx="2" ry="2" />
+<text  x="14175.18" y="1839.5" >std::enable_..</text>
+</g>
+<g >
+<title>std::bitset&lt;8ul&gt;::set (80,401,692 samples, 0.51%)</title><rect x="15687.2" y="1909" width="101.6" height="15.0" fill="rgb(223,83,20)" rx="2" ry="2" />
+<text  x="15690.18" y="1919.5" >std::bitset&lt;..</text>
+</g>
+<g >
+<title>spla::TDecorationStorage&lt;int, spla::FormatMatrix, 8&gt;::validate (80,401,692 samples, 0.51%)</title><rect x="15687.2" y="1925" width="101.6" height="15.0" fill="rgb(233,130,31)" rx="2" ry="2" />
+<text  x="15690.18" y="1935.5" >spla::TDecor..</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, int&gt;, std::allocator&lt;std::pair&lt;unsigned int, int&gt; &gt; &gt;::_S_relocate (246,603,828 samples, 1.56%)</title><rect x="16771.4" y="1893" width="311.5" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="16774.37" y="1903.5" >std::vector&lt;std::pair&lt;unsigned int, int&gt;, ..</text>
+</g>
+<g >
+<title>std::bitset&lt;8ul&gt;::_Unchecked_test (80,875,222 samples, 0.51%)</title><rect x="15475.7" y="1861" width="102.2" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="15478.70" y="1871.5" >std::bitset&lt;..</text>
+</g>
+<g >
+<title>spla::Library::get (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1989" width="69.7" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
+<text  x="19624.22" y="1999.5" >spla::L..</text>
+</g>
+<g >
+<title>spla::ref_ptr&lt;spla::TDecoration&lt;int&gt; &gt;::get (81,536,995 samples, 0.52%)</title><rect x="15269.2" y="1909" width="103.0" height="15.0" fill="rgb(215,49,11)" rx="2" ry="2" />
+<text  x="15272.22" y="1919.5" >spla::ref_pt..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1605" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1615.5" >[unknown]</text>
+</g>
+<g >
+<title>[libtbb.so.12.17] (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1509" width="23.4" height="15.0" fill="rgb(237,150,35)" rx="2" ry="2" />
+<text  x="19670.49" y="1519.5" >[..</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::max_size (83,183,073 samples, 0.53%)</title><rect x="12698.4" y="1877" width="105.1" height="15.0" fill="rgb(236,143,34)" rx="2" ry="2" />
+<text  x="12701.39" y="1887.5" >std::vector&lt;..</text>
+</g>
+<g >
+<title>std::vector&lt;float, std::allocator&lt;float&gt; &gt;::resize (15,786,225 samples, 0.10%)</title><rect x="14690.6" y="1765" width="19.9" height="15.0" fill="rgb(250,208,49)" rx="2" ry="2" />
+<text  x="14693.60" y="1775.5" ></text>
+</g>
+<g >
+<title>[ld-linux-x86-64.so.2] (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1381" width="23.4" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="19670.49" y="1391.5" >[..</text>
+</g>
+<g >
+<title>[unknown] (367,987,643 samples, 2.33%)</title><rect x="10355.6" y="2053" width="464.8" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10358.55" y="2063.5" >[unknown]</text>
+</g>
+<g >
+<title>khrIcdInitialize (55,146,181 samples, 0.35%)</title><rect x="19621.2" y="1893" width="69.7" height="15.0" fill="rgb(225,95,22)" rx="2" ry="2" />
+<text  x="19624.22" y="1903.5" >khrIcdI..</text>
+</g>
+<g >
+<title>std::locale::_S_initialize (18,814,688 samples, 0.12%)</title><rect x="17209.5" y="1925" width="23.7" height="15.0" fill="rgb(244,180,43)" rx="2" ry="2" />
+<text  x="17212.48" y="1935.5" >s..</text>
+</g>
+<g >
+<title>spla::CpuLil&lt;int&gt;* spla::TMatrix&lt;int&gt;::get&lt;spla::CpuLil&lt;int&gt; &gt; (91,536,994 samples, 0.58%)</title><rect x="15256.6" y="1957" width="115.6" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
+<text  x="15259.59" y="1967.5" >spla::CpuLil&lt;i..</text>
+</g>
+<g >
+<title>operator new (82,341,881 samples, 0.52%)</title><rect x="16875.3" y="1845" width="104.0" height="15.0" fill="rgb(216,51,12)" rx="2" ry="2" />
+<text  x="16878.25" y="1855.5" >operator new</text>
+</g>
+<g >
+<title>_start (7,258,437,399 samples, 45.89%)</title><rect x="10820.4" y="2053" width="9169.6" height="15.0" fill="rgb(245,185,44)" rx="2" ry="2" />
+<text  x="10823.43" y="2063.5" >_start</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;int, int&gt;, std::allocator&lt;std::pair&lt;int, int&gt; &gt; &gt;::push_back (241,374,833 samples, 1.53%)</title><rect x="19316.3" y="1973" width="304.9" height="15.0" fill="rgb(229,112,26)" rx="2" ry="2" />
+<text  x="19319.29" y="1983.5" >std::vector&lt;std::pair&lt;int, int&gt;, std::all..</text>
+</g>
+<g >
+<title>[libtbb.so.12.17] (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1589" width="23.4" height="15.0" fill="rgb(237,150,35)" rx="2" ry="2" />
+<text  x="19670.49" y="1599.5" >[..</text>
+</g>
+<g >
+<title>std::vector&lt;std::pair&lt;unsigned int, float&gt;, std::allocator&lt;std::pair&lt;unsigned int, float&gt; &gt; &gt;::_S_max_size (83,183,073 samples, 0.53%)</title><rect x="12698.4" y="1861" width="105.1" height="15.0" fill="rgb(222,81,19)" rx="2" ry="2" />
+<text  x="12701.39" y="1871.5" >std::vector&lt;..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="1717" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="1727.5" >[unknown]</text>
+</g>
+<g >
+<title>[ld-linux-x86-64.so.2] (18,520,032 samples, 0.12%)</title><rect x="19667.5" y="1301" width="23.4" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="19670.49" y="1311.5" >[..</text>
+</g>
+<g >
+<title>[unknown] (167,845,553 samples, 1.06%)</title><rect x="10608.4" y="821" width="212.0" height="15.0" fill="rgb(210,24,5)" rx="2" ry="2" />
+<text  x="10611.39" y="831.5" >[unknown]</text>
+</g>
+</g>
+</svg>
