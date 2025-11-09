@@ -9,7 +9,7 @@ private:
     int weight_;
 
 public:
-    MSTRunner() : weight_(0) {};
+    MSTRunner() : weight_(0) {}
 
     virtual int RunAlgo(SPLAGraph const& graph);
     virtual double const& GetResult() const;
