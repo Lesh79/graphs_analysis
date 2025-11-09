@@ -16,6 +16,6 @@ public:
                    double tol = 1e-4, int max_iter = 100)
         : indices_(indices), damp_(damp), tol_(tol), max_iter_(max_iter) {}
 
-    virtual double RunAlgo(SPLAGraph const& graph);
+    virtual int RunAlgo(SPLAGraph const& graph);
     virtual spla::ref_ptr<spla::Vector> const& GetResult() const;
 };

@@ -13,6 +13,6 @@ private:
 public:
     SSBFSRunner(int s) : s_(s) {}
 
-    virtual double RunAlgo(SPLAGraph const& graph);
+    virtual int RunAlgo(SPLAGraph const& graph);
     virtual spla::ref_ptr<spla::Vector> const& GetResult() const;
 };

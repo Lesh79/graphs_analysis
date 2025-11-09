@@ -3,7 +3,7 @@
 #include <chrono>
 #include <cmath>
 
-double PageRankRunner::RunAlgo(SPLAGraph const& graph) {
+int PageRankRunner::RunAlgo(SPLAGraph const& graph) {
     int N = graph.n_vertices;
 
     spla::ref_ptr<spla::Descriptor> desc = spla::Descriptor::make();

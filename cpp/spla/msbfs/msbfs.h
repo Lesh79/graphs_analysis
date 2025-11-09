@@ -16,6 +16,6 @@ private:
 public:
     MSBFSRunner(std::vector<int> const& ss) : ss_(ss) {}
 
-    virtual double RunAlgo(SPLAGraph const& graph);
+    virtual int RunAlgo(SPLAGraph const& graph);
     virtual spla::ref_ptr<spla::Matrix> const& GetResult() const;
 };

@@ -30,7 +30,7 @@ void MSBFSRunner::ApplyMaskOnFront(spla::ref_ptr<spla::Matrix>& front,
     }
 }
 
-double MSBFSRunner::RunAlgo(SPLAGraph const& graph) {
+int MSBFSRunner::RunAlgo(SPLAGraph const& graph) {
     spla::ref_ptr<spla::Descriptor> desc = spla::Descriptor::make();
     desc->set_early_exit(true);
     desc->set_struct_only(true);
@@ -65,7 +65,6 @@ double MSBFSRunner::RunAlgo(SPLAGraph const& graph) {
     }
 
     auto start = std::chrono::high_resolution_clock::now();
-
     while (!fronts_empty) {
         spla::exec_mxm(p, prev_fronts, graph.matrix, spla::FIRST_INT, spla::MIN_NON_ZERO_INT,
                        SPLA_ZERO_INT, desc);
@@ -81,7 +80,7 @@ double MSBFSRunner::RunAlgo(SPLAGraph const& graph) {
         std::swap(p, prev_fronts);
         std::swap(p_updated, parents_);
 
-        fronts_empty = frontier_size->as_int() <= 0;
+        fronts_empty = frontier_size->as_int() == 0;
     }
 
     auto end = std::chrono::high_resolution_clock::now();

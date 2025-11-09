@@ -2,7 +2,7 @@
 
 #include <chrono>
 
-double MSTRunner::RunAlgo(SPLAGraph const& graph) {
+int MSTRunner::RunAlgo(SPLAGraph const& graph) {
     int N = graph.n_vertices;
 
     spla::ref_ptr<spla::Descriptor> desc = spla::Descriptor::make();

@@ -17,7 +17,7 @@ void GBPageRank::RunAlgo(GBGraph const& graph) {
     }
 
     GrB_Index nrows, ncols;
-    GrB_Matrix_nrows(&nrows, graph.matrix);
+    GrB_Info status = GrB_Matrix_nrows(&nrows, graph.matrix);
     GrB_Matrix_ncols(&ncols, graph.matrix);
     if (nrows != ncols) {
         throw std::runtime_error("Graph must be square");

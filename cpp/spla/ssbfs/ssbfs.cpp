@@ -1,6 +1,6 @@
 #include "ssbfs.h"
 
-double SSBFSRunner::RunAlgo(SPLAGraph const& graph) {
+int SSBFSRunner::RunAlgo(SPLAGraph const& graph) {
     spla::ref_ptr<spla::Descriptor> desc = spla::Descriptor::make();
     desc->set_early_exit(true);
     desc->set_struct_only(true);

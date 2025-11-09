@@ -11,7 +11,7 @@ private:
 public:
     MSTRunner() : weight_(0) {};
 
-    virtual double RunAlgo(SPLAGraph const& graph);
+    virtual int RunAlgo(SPLAGraph const& graph);
     virtual double const& GetResult() const;
 
     spla::ref_ptr<spla::Matrix> GetSpanningTree() const {

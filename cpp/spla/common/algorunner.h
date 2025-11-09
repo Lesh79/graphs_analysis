@@ -6,7 +6,7 @@
 template <typename ResultT>
 class AlgoRunner {
 public:
-    virtual double RunAlgo(SPLAGraph const& graph) = 0;
+    virtual int RunAlgo(SPLAGraph const& graph) = 0;
     virtual ResultT const& GetResult() const = 0;
 
     AlgoRunner() = default;
