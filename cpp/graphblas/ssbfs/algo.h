@@ -18,7 +18,7 @@ public:
     std::chrono::milliseconds GetExecTime() const;
 
 private:
-    static GrB_Vector ComputeBFSCore(GrB_Matrix const& A, GrB_Index source);
+    GrB_Vector ComputeBFSCore(GrB_Matrix const& A, GrB_Index source);
 
     void ParseResult();
 
