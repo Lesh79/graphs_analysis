@@ -1,0 +1,2 @@
+add_subdirectory(spla)
+add_subdirectory(graphblas)
