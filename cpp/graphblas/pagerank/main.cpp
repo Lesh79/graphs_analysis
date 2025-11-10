@@ -17,15 +17,22 @@ int main(int argc, char** argv) {
 
     PRConfig config = PRConfig::Parse(std::string(argv[1]));
 
-    Parser parser;
-    GBGraph graph = parser.ParseSNAP(config.GetGraphPath());
+    for (int i = 0; i < 16; ++i) {
+        Parser parser;
+        GBGraph graph = parser.ParseSNAP(config.GetGraphPath());
 
-    GBPageRank pagerank(config.GetDampingFactor(), config.GetTolerance(), config.GetMaxIter());
-    pagerank.RunAlgo(graph);
+        GBPageRank pagerank(config.GetDampingFactor(), config.GetTolerance(), config.GetMaxIter());
+        pagerank.RunAlgo(graph);
 
-    std::cout << pagerank.GetExecTime().count() << std::endl;
+        if (i == 0) {
+            continue;
+        }
 
-    GrB_Matrix_free(&graph.matrix);
+        std::cout << pagerank.GetExecTime().count() << std::endl;
+
+        GrB_Matrix_free(&graph.matrix);
+    }
+
     LAGraph_Finalize(NULL);
     GrB_finalize();
 

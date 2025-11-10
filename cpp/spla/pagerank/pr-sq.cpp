@@ -1,7 +1,8 @@
-#include "pr.h"
-
 #include <chrono>
 #include <cmath>
+#include <iostream>
+
+#include "pr.h"
 
 int PageRankRunner::RunAlgo(SPLAGraph const& graph) {
     int N = graph.n_vertices;
@@ -34,9 +35,6 @@ int PageRankRunner::RunAlgo(SPLAGraph const& graph) {
     r_prev->fill_with(spla::Scalar::make_float(1.0f / static_cast<float>(N)));
 
     float error = tol_ + 0.1f;
-    spla::ref_ptr<spla::OpBinary> abs_diff =
-            spla::OpBinary::make_float("abs_diff", "(float a, float b) { return fabs(a - b); }",
-                                       [](float a, float b) { return fabs(a - b); });
 
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -46,14 +44,14 @@ int PageRankRunner::RunAlgo(SPLAGraph const& graph) {
                               spla::ALWAYS_FLOAT, SPLA_ZERO_FLOAT);
         spla::exec_v_eadd(r, r_tmp, addition, spla::PLUS_FLOAT);
 
-        spla::exec_v_eadd(errors, r, r_prev, abs_diff);
+        spla::exec_v_eadd(errors, r, r_prev, spla::MINUS_POW2_FLOAT);
         spla::exec_v_reduce(error2, SPLA_ZERO_FLOAT, errors, spla::PLUS_FLOAT);
 
-        error = error2->as_float();
+        error = std::sqrt(error2->as_float());
 
         std::swap(r, r_prev);
     }
-
+    // spla::pr(r, A, damp_, tol_, desc);
     auto end = std::chrono::high_resolution_clock::now();
 
     // std::cout << iter - 1 << ' ' << error << ' ';
