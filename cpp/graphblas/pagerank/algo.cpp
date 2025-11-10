@@ -40,7 +40,7 @@ GrB_Vector GBPageRank::ComputePageRankCore(GBGraph const& graph, double alpha, d
     LAGraph_Graph G;
     int status = LAGraph_New(&G, &matrix, LAGraph_ADJACENCY_DIRECTED, msg_);
     if (status != GrB_SUCCESS) {
-        std::cout << "Failed to create LAGraph_Graph: " << msg_ << std::endl;
+        std::cout << "Failed to create LAGraph_Graph: " << status << std::endl;
         throw std::runtime_error(std::string("LAGraph_New failed: ") + msg_);
     }
 
@@ -59,11 +59,12 @@ GrB_Vector GBPageRank::ComputePageRankCore(GBGraph const& graph, double alpha, d
     }
 
     int niters = 0;
+    msg_[0] = '\0';
     status = LAGr_PageRank(&rank, &niters, G, alpha, eps, max_iter, msg_);
     if (status != GrB_SUCCESS) {
         LAGraph_Delete(&G, msg_);
-        std::cout << "Failed to compute PageRank: " << msg_ << std::endl;
-        throw std::runtime_error(std::string("LAGr_PageRank failed: ") + msg_);
+        std::clog << "Failed to compute PageRank: " << status << std::endl;
+        // throw std::runtime_error(std::string("LAGr_PageRank failed: ") + msg_);
     }
 
     LAGraph_Delete(&G, msg_);
